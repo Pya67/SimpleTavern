@@ -1,0 +1,29 @@
+{
+  "name": "simple-tavern-video",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "30-second promo video for SimpleTavern, built with Remotion",
+  "scripts": {
+    "dev": "remotion studio",
+    "capture": "tsx scripts/capture.ts",
+    "render": "remotion render Promo out/promo.mp4",
+    "still": "remotion still Promo out/still.png --frame=60",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.545",
+    "@remotion/google-fonts": "4.0.545",
+    "@remotion/studio": "4.0.545",
+    "@remotion/transitions": "4.0.545",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.545"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "playwright": "^1.65.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}

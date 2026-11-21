@@ -1,0 +1,4 @@
+node_modules/
+out/
+# Recorded clips are regenerated with `npm run capture`
+public/clips/*.mp4

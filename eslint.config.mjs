@@ -14,7 +14,7 @@ const eslintConfig = defineConfig([
       "react-hooks/refs": "warn",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "data/**", "public/sw.js", "playwright-report/**", "test-results/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "data/**", "public/sw.js", "playwright-report/**", "test-results/**", "video/**"]),
 ]);
 
 export default eslintConfig;

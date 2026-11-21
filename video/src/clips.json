@@ -1,0 +1,135 @@
+{
+  "chat": {
+    "duration": 36.43,
+    "segments": [
+      [
+        0,
+        4.656
+      ],
+      [
+        5.224,
+        36.43
+      ]
+    ],
+    "keys": [
+      {
+        "t": 4.341,
+        "keys": "Enter"
+      },
+      {
+        "t": 13.291,
+        "keys": "Ctrl + B"
+      },
+      {
+        "t": 14.115,
+        "keys": "Shift + Enter"
+      },
+      {
+        "t": 15.945,
+        "keys": "Ctrl + I"
+      }
+    ]
+  },
+  "actions": {
+    "duration": 9.09,
+    "segments": [
+      [
+        0,
+        9.09
+      ]
+    ],
+    "keys": [
+      {
+        "t": 1.335,
+        "keys": "→"
+      },
+      {
+        "t": 6.325,
+        "keys": "↑"
+      },
+      {
+        "t": 8.564,
+        "keys": "Esc"
+      }
+    ]
+  },
+  "persona": {
+    "duration": 2.65,
+    "segments": [
+      [
+        0,
+        2.65
+      ]
+    ],
+    "keys": [
+      {
+        "t": 0.407,
+        "keys": "Alt + P"
+      },
+      {
+        "t": 2.227,
+        "keys": "Esc"
+      }
+    ]
+  },
+  "mobile": {
+    "duration": 13.04,
+    "segments": [
+      [
+        0,
+        13.04
+      ]
+    ],
+    "keys": []
+  },
+  "theme": {
+    "duration": 12.16,
+    "segments": [
+      [
+        0,
+        12.16
+      ]
+    ],
+    "keys": []
+  },
+  "characters": {
+    "duration": 5.04,
+    "segments": [
+      [
+        0,
+        5.04
+      ]
+    ],
+    "keys": []
+  },
+  "lorebooks": {
+    "duration": 5.23,
+    "segments": [
+      [
+        0,
+        5.23
+      ]
+    ],
+    "keys": []
+  },
+  "sidebar": {
+    "duration": 2.69,
+    "segments": [
+      [
+        0,
+        2.69
+      ]
+    ],
+    "keys": []
+  },
+  "templates": {
+    "duration": 3.75,
+    "segments": [
+      [
+        0,
+        3.75
+      ]
+    ],
+    "keys": []
+  }
+}
