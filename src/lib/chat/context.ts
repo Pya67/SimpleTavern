@@ -22,6 +22,7 @@ import { buildPrompt, type HistoryMessage } from "@/lib/prompt/builder";
 import { effectiveChunks } from "@/lib/memory/compaction";
 import { countTokens } from "@/lib/tokens.server";
 import type { MessageView } from "@/lib/chat/tree";
+import { NEUTRAL_BASELINE, describeForPrompt, initialState, latestEmotion, normalizeState } from "@/lib/emotion/engine";
 
 export async function getSettingsRow() {
   const [s] = await db.select().from(settings).where(eq(settings.id, 1));
@@ -104,6 +105,15 @@ export function pathForMemory(path: MessageView[]) {
   }));
 }
 
+/** Prompt text for the emotion state that applies after `history` (undefined when the engine is off). */
+export function emotionForPrompt(ctx: ChatContext, history: Pick<MessageView, "role" | "emotion">[]) {
+  if (!ctx.chat.emotionEnabled) return undefined;
+  const baseline = ctx.chat.emotionBaseline ? { ...NEUTRAL_BASELINE, ...ctx.chat.emotionBaseline } : null;
+  const raw = latestEmotion(history);
+  const state = raw ? normalizeState(raw, baseline ?? NEUTRAL_BASELINE) : baseline ? initialState(baseline) : null;
+  return state ? describeForPrompt(state) : undefined;
+}
+
 export function buildForContext(
   ctx: ChatContext,
   history: MessageView[],
@@ -137,6 +147,8 @@ export function buildForContext(
     lore: { books: ctx.books, entries: ctx.entries },
     authorsNote: ctx.chat.authorsNote,
     authorsNoteDepth: ctx.chat.authorsNoteDepth,
+    // Continuing a reply: use the feelings from before it, not the reading of its first half.
+    emotion: emotionForPrompt(ctx, mode === "continue" ? history.slice(0, -1) : history),
     contextSize: ctx.contextSize,
     maxTokens: answerBudget(ctx.params),
     targetWords: ctx.params.targetWords,

@@ -14,6 +14,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import type { EmotionState, EmotionVector } from "@/lib/emotion/engine";
 import type { CompactionSettings, LoreSelectiveLogic, PresetParams, PromptBlock, UiPrefs, ModelPrefs } from "@/lib/types";
 
 const tsvector = customType<{ data: string }>({
@@ -100,6 +101,8 @@ export const lorebooks = pgTable("lorebooks", {
   scanDepth: integer("scan_depth").notNull().default(6),
   tokenBudget: integer("token_budget").notNull().default(1024),
   recursive: boolean("recursive").notNull().default(false),
+  /** Where it was imported from (e.g. a JanitorAI script URL), so re-imports reuse it. Empty for local books. */
+  source: text("source").notNull().default(""),
   ...timestamps,
 });
 
@@ -168,6 +171,10 @@ export const chats = pgTable(
     // Deleting a directory keeps its chats; they just fall back to the date groups.
     directoryId: uuid("directory_id").references(() => directories.id, { onDelete: "set null" }),
     forkedFromChatId: uuid("forked_from_chat_id"),
+    /** Emotion engine: track {{char}}'s feelings per reply and feed them into the prompt. */
+    emotionEnabled: boolean("emotion_enabled").notNull().default(true),
+    /** Resting temperament the engine decays toward (estimated from the character on first use). */
+    emotionBaseline: jsonb("emotion_baseline").$type<EmotionVector>(),
     totalCost: doublePrecision("total_cost").notNull().default(0),
     totalTokens: integer("total_tokens").notNull().default(0),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
@@ -217,6 +224,8 @@ export const messages = pgTable(
     finishReason: text("finish_reason"),
     bookmarked: boolean("bookmarked").notNull().default(false),
     hidden: boolean("hidden").notNull().default(false),
+    /** Emotion engine state of {{char}} after this assistant message. */
+    emotion: jsonb("emotion").$type<EmotionState>(),
     search: tsvector("search").generatedAlwaysAs(sql`to_tsvector('simple', coalesce(content, ''))`),
     ...timestamps,
   },

@@ -4,8 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { Plus, Star, Trash2, UserRound } from "lucide-react";
+import { Plus, Search, Star, Trash2, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/app/page-header";
 import { AvatarUploader } from "@/components/common/avatar-uploader";
 import { EntityAvatar } from "@/components/common/avatar";
@@ -34,6 +35,27 @@ export default function PersonasPage() {
   const byId = new Map((personas ?? []).map((p) => [p.id, p]));
   const current = selected ? byId.get(selected) : undefined;
 
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const matches = searching
+    ? order.map((id) => byId.get(id)).filter((p): p is PersonaT => !!p && [p.name, p.pronouns, p.description].some((s) => s?.toLowerCase().includes(needle)))
+    : [];
+
+  const rowCls = (id: string) => cn("surface-grain flex cursor-pointer items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-accent", selected === id && "bg-brand/12 hover:bg-brand/15");
+  const rowBody = (p: PersonaT) => (
+    <>
+      <EntityAvatar name={p.name} src={p.avatar} size={36} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+          {p.name}
+          {settings?.defaultPersonaId === p.id && <Star className="size-3 shrink-0 fill-brand text-brand" />}
+        </div>
+        <div className="truncate text-xs text-muted-foreground">{p.description || "No description"}</div>
+      </div>
+    </>
+  );
+
   const create = async () => {
     const p = await rpc("personas.create", { name: "New persona", description: "", pronouns: "" });
     await qc.invalidateQueries({ queryKey: qk.personas });
@@ -54,38 +76,49 @@ export default function PersonasPage() {
       {personas && !personas.length ? (
         <EmptyState icon={UserRound} title="No personas" action={<Button onClick={create}>Create persona</Button>} />
       ) : (
-        <div className="borderless-controls mx-auto grid min-h-0 w-full max-w-5xl flex-1 gap-6 overflow-y-auto px-4 py-6 md:grid-cols-[280px_1fr] md:px-6">
-          <Reorder.Group
-            axis="y"
-            values={order}
-            onReorder={(ids: string[]) => {
-              setOrder(ids);
-              void rpc("personas.reorder", { ids }).then(() => qc.invalidateQueries({ queryKey: qk.personas }));
-            }}
-            className="space-y-1.5"
-          >
-            {order.map((id) => {
-              const p = byId.get(id);
-              if (!p) return null;
-              return (
-                <Reorder.Item
-                  key={id}
-                  value={id}
-                  onClick={() => setSelected(id)}
-                  className={cn("surface-grain flex cursor-pointer items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-accent", selected === id && "bg-brand/12 hover:bg-brand/15")}
-                >
-                  <EntityAvatar name={p.name} src={p.avatar} size={36} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 truncate text-sm font-medium">
-                      {p.name}
-                      {settings?.defaultPersonaId === p.id && <Star className="size-3 shrink-0 fill-brand text-brand" />}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">{p.description || "No description"}</div>
+        <div className="borderless-controls mx-auto grid min-h-0 w-full max-w-5xl flex-1 content-start gap-6 overflow-y-auto px-4 py-6 grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] md:px-6">
+          <div className="min-w-0 space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search personas…" value={q} onChange={(e) => setQ(e.target.value)} className="h-9 pl-8 pr-8" aria-label="Search personas" />
+              {q && (
+                <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            {searching ? (
+              // Filtered results aren't draggable: reordering a partial list would scramble the full order.
+              <div className="space-y-1.5">
+                {matches.map((p) => (
+                  <div key={p.id} onClick={() => setSelected(p.id)} className={rowCls(p.id)}>
+                    {rowBody(p)}
                   </div>
-                </Reorder.Item>
-              );
-            })}
-          </Reorder.Group>
+                ))}
+                {!matches.length && <div className="px-2 py-6 text-center text-sm text-muted-foreground">No personas match “{q.trim()}”</div>}
+              </div>
+            ) : (
+              <Reorder.Group
+                axis="y"
+                values={order}
+                onReorder={(ids: string[]) => {
+                  setOrder(ids);
+                  void rpc("personas.reorder", { ids }).then(() => qc.invalidateQueries({ queryKey: qk.personas }));
+                }}
+                className="space-y-1.5"
+              >
+                {order.map((id) => {
+                  const p = byId.get(id);
+                  if (!p) return null;
+                  return (
+                    <Reorder.Item key={id} value={id} onClick={() => setSelected(id)} className={rowCls(id)}>
+                      {rowBody(p)}
+                    </Reorder.Item>
+                  );
+                })}
+              </Reorder.Group>
+            )}
+          </div>
           <AnimatePresence mode="wait">
             {current && (
               <motion.div key={current.id} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}>

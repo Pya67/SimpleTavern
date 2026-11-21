@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
 
-const PUBLIC = ["/login", "/api/auth/login", "/api/auth/status", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icons"];
+// The userscript is public so userscript managers can fetch it to install; it holds no secrets.
+const PUBLIC = ["/login", "/api/auth/login", "/api/auth/status", "/manifest.webmanifest", "/sw.js", "/offline.html", "/icons", "/simple-tavern-janitor.user.js"];
 
 export async function proxy(req: NextRequest) {
   const bypass = ["1", "true", "yes"].includes((process.env.AUTH_BYPASS ?? "").toLowerCase());
@@ -20,7 +21,9 @@ export async function proxy(req: NextRequest) {
   }
   const url = req.nextUrl.clone();
   url.pathname = "/login";
-  url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
+  // Keep the query too (e.g. /characters?import=janitor from the userscript survives logging in).
+  const back = pathname + req.nextUrl.search;
+  url.search = back === "/" ? "" : `?next=${encodeURIComponent(back)}`;
   return NextResponse.redirect(url);
 }
 

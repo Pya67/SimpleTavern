@@ -31,7 +31,7 @@ export async function exportChat(chatId: string, format: "md" | "json" | "html")
     const chunks = await db.select().from(memoryChunks).where(eq(memoryChunks.chatId, chatId));
     const facts = await db.select().from(pinnedFacts).where(eq(pinnedFacts.chatId, chatId));
     const body = {
-      format: "sussy-tavern-chat",
+      format: "simple-tavern-chat",
       version: 1,
       exportedAt: new Date().toISOString(),
       chat: { title: chat.title, activeRootId: chat.activeRootId, authorsNote: chat.authorsNote, authorsNoteDepth: chat.authorsNoteDepth, createdAt: chat.createdAt },
@@ -79,7 +79,7 @@ ${path
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function importChatJson(data: any) {
-  if (data?.format !== "sussy-tavern-chat") throw new Error("Not a Sussy Tavern chat export");
+  if (data?.format !== "simple-tavern-chat" && data?.format !== "sussy-tavern-chat") throw new Error("Not a SimpleTavern chat export");
   let [character] = await db.select().from(characters).where(eq(characters.name, data.character?.name ?? ""));
   if (!character) [character] = await db.insert(characters).values({ name: data.character?.name || "Imported character" }).returning();
   const [chat] = await db

@@ -1,4 +1,4 @@
-# Sussy Tavern — Implementation Plan
+# SimpleTavern — Implementation Plan
 
 A single-user, self-hosted roleplay chat app with any LLM via OpenRouter. The goal is UX first: streaming that feels instant and smooth, motion on every state change, and chats that never hit a length limit.
 

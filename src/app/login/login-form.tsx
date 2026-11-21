@@ -21,7 +21,10 @@ export function LoginForm() {
     const res = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: pw }) });
     setBusy(false);
     if (res.ok) {
-      router.replace(params.get("next") || "/");
+      // Only follow in-app paths, so a crafted ?next= can't send you to another site after signing in.
+      const next = params.get("next") ?? "";
+      // Keep the #fragment: the JanitorAI userscript sends the character there, and it must survive signing in.
+      router.replace(next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next + window.location.hash : "/");
       router.refresh();
     } else {
       const j = await res.json().catch(() => ({}));

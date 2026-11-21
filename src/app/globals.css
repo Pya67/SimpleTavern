@@ -6,6 +6,8 @@
 @source "../../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *, .black *));
+/* Installed PWA (home-screen app): the system bar areas around the app are painted black. */
+@custom-variant standalone (@media (display-mode: standalone));
 
 @theme inline {
   --color-background: var(--background);
@@ -257,6 +259,12 @@
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+  }
+  @media (display-mode: standalone) {
+    html,
+    body {
+      background-color: #000;
+    }
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {

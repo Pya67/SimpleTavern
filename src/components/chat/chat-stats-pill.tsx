@@ -47,18 +47,20 @@ export function ChatStatsPill({
         render={
           <button
             onClick={onClick}
-            className="hidden h-7 items-center gap-2.5 rounded-full px-2.5 text-xs tabular-nums text-foreground transition-colors hover:bg-accent/80 sm:flex"
+            // Sizes follow the chat header's width (an @container): the full pill when there's room,
+            // just model + cost when it's tighter, hidden when it's narrow.
+            className="hidden h-7 shrink-0 items-center gap-2.5 rounded-full px-2.5 text-xs tabular-nums text-foreground transition-colors hover:bg-accent/80 @lg:flex"
             aria-label="Chat stats and generation settings"
           />
         }
       >
         <ProviderIcon provider={providerKey(m)} label={providerLabel(m) || "?"} className="size-3.5" />
-        <span className="flex items-center gap-1">
+        <span className="hidden items-center gap-1 @2xl:flex">
           <MessageSquare className="size-3" />
           {formatNum(count)}
         </span>
         {pct != null && (
-          <span className="flex items-center gap-1.5">
+          <span className="hidden items-center gap-1.5 @2xl:flex">
             <ContextRing pct={pct} />
             {pctLabel}
           </span>

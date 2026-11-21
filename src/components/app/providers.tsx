@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 import { useEffect, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/client/rpc";
+import { useIsMobile } from "@/hooks/use-media";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [qc] = useState(
@@ -41,20 +42,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** All toasts and notifications (sonner), bottom right, following the app's own theme. */
+/** All toasts and notifications (sonner), bottom right (top on phones), following the app's own theme. */
 function AppToaster() {
   const { resolvedTheme } = useTheme();
+  const isMobile = useIsMobile();
   return (
     <Toaster
-      position="bottom-right"
+      // On phones toasts sit at the top, clear of the message box and keyboard.
+      position={isMobile ? "top-center" : "bottom-right"}
       theme={resolvedTheme === "light" ? "light" : "dark"}
       // Short by default; toasts with Undo pass a longer duration (UNDO_DURATION).
       duration={2500}
-      // On phones toasts span the width; lift them above the message box.
-      mobileOffset={{ bottom: 96 }}
-      // Dismiss with the × button, or swipe a toast away towards its corner.
+      // On phones toasts span the width; keep them below the notch / status bar.
+      mobileOffset={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
+      // Dismiss with the × button, or swipe a toast away towards its edge.
       closeButton
-      swipeDirections={["right", "bottom"]}
+      swipeDirections={isMobile ? ["top", "left", "right"] : ["right", "bottom"]}
       icons={{
         success: <CircleCheck className="size-4 text-emerald-500" />,
         info: <Info className="size-4 text-sky-500" />,

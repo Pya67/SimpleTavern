@@ -215,7 +215,7 @@ export function PersonaPanel({ personas, currentId, onSelect }: { personas: Pers
 export function LorePanel({ info }: { info: ChatInfo }) {
   const { data: books } = useLorebooks();
   const qc = useQueryClient();
-  const charBooks = new Set<string>();
+  const charBooks = new Set(info.characterLorebookIds ?? []);
   const toggle = async (id: string) => {
     const next = info.lorebookIds.includes(id) ? info.lorebookIds.filter((x) => x !== id) : [...info.lorebookIds, id];
     qc.setQueryData<ChatInfo>(qk.chat(info.chat.id), (old) => (old ? { ...old, lorebookIds: next } : old));
@@ -224,7 +224,9 @@ export function LorePanel({ info }: { info: ChatInfo }) {
   };
   return (
     <div className="space-y-4">
-      <p className="px-1 text-xs text-muted-foreground">Attached lorebooks add world info when their keywords come up.</p>
+      <p className="px-1 text-xs text-muted-foreground">
+        Checked lorebooks add world info when their keywords come up. Books linked to {info.character.name} are always on; change those on the character.
+      </p>
       {!books?.length && (
         <div className="surface-well rounded-xl p-4 text-center text-sm text-muted-foreground">
           No lorebooks yet.
@@ -235,23 +237,29 @@ export function LorePanel({ info }: { info: ChatInfo }) {
       )}
       <div className="space-y-1.5">
         {books?.map((b) => {
-          const on = info.lorebookIds.includes(b.id);
+          const fromChar = charBooks.has(b.id);
+          const on = fromChar || info.lorebookIds.includes(b.id);
           return (
             <button
               key={b.id}
-              disabled={charBooks.has(b.id)}
+              disabled={fromChar}
+              title={fromChar ? `Linked to ${info.character.name}. Change it on the character.` : undefined}
               onClick={() => toggle(b.id)}
               aria-pressed={on}
-              className={cn("surface-grain flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-accent", on && "bg-brand/12 hover:bg-brand/15")}
+              className={cn(
+                "surface-grain flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-accent disabled:cursor-default",
+                on && "bg-brand/12 hover:bg-brand/15",
+              )}
             >
               <BookOpen className={cn("size-4 shrink-0", on ? "text-brand" : "text-muted-foreground")} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{b.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {b.entryCount} {b.entryCount === 1 ? "entry" : "entries"}
+                  {fromChar && <> · from {info.character.name}</>}
                 </div>
               </div>
-              <span className={cn("flex size-4 items-center justify-center rounded", on ? "bg-brand text-brand-foreground" : "bg-foreground/12")}>{on && <Check className="size-3" />}</span>
+              <span className={cn("flex size-4 items-center justify-center rounded", on ? "bg-brand text-brand-foreground" : "bg-foreground/12", fromChar && "opacity-60")}>{on && <Check className="size-3" />}</span>
             </button>
           );
         })}

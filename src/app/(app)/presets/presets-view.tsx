@@ -5,9 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { Copy, Eye, EyeOff, GripVertical, Plus, Star, Trash2 } from "lucide-react";
+import { Copy, GripVertical, Plus, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/app/page-header";
 import { ModelPicker } from "@/components/common/model-picker";
@@ -69,7 +70,7 @@ function PresetsTab({ initial }: { initial: string | null }) {
   const current = presets?.find((p) => p.id === sel);
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 md:grid-cols-[260px_1fr] md:px-6">
+    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 md:grid-cols-[260px_minmax(0,1fr)] md:px-6">
       <div className="space-y-1.5">
         {presets?.map((p) => (
           <ListItem key={p.id} active={p.id === sel} onClick={() => setSel(p.id)} title={p.name} subtitle={models?.find((m) => m.id === p.modelId)?.name ?? p.modelId} isDefault={settings?.defaultPresetId === p.id} />
@@ -203,20 +204,27 @@ function PresetEditor({ preset, isDefault, onSelect }: { preset: PresetT; isDefa
 // ---------------- Templates ----------------
 
 const KIND_INFO: Record<PromptBlockKind, { label: string; desc: string; editable: "full" | "wrapper" | "none" }> = {
-  main: { label: "Main prompt", desc: "Core instructions. Overridden by a character's system prompt.", editable: "full" },
+  main: { label: "Main prompt", desc: "Core instructions. Overridden by a character's system prompt unless it contains {{original}}.", editable: "full" },
   char_description: { label: "Character description", desc: "Wrapper — {{content}} is the description.", editable: "wrapper" },
   char_personality: { label: "Personality", desc: "Wrapper — {{content}} is the personality.", editable: "wrapper" },
   scenario: { label: "Scenario", desc: "Wrapper — {{content}} is the scenario.", editable: "wrapper" },
   persona: { label: "Persona", desc: "Wrapper — {{content}} is your persona's description.", editable: "wrapper" },
   examples: { label: "Example dialogue", desc: "Wrapper — {{content}} is the example dialogue.", editable: "wrapper" },
-  lore_before: { label: "Lore (before character)", desc: "Lorebook entries positioned before the character.", editable: "none" },
-  lore_after: { label: "Lore (after character)", desc: "Lorebook entries positioned after the character.", editable: "none" },
+  lore_before: { label: "Lore (before character)", desc: "Lorebook entries positioned before the character. Wrapped in <world_info>.", editable: "none" },
+  lore_after: { label: "Lore (after character)", desc: "Lorebook entries positioned after the character. Wrapped in <world_info>.", editable: "none" },
   memory: { label: "Memory", desc: "Wrapper — {{content}} is the compacted story-so-far.", editable: "wrapper" },
   facts: { label: "Pinned facts", desc: "Wrapper — {{content}} is the list of pinned facts.", editable: "wrapper" },
   history: { label: "Chat history", desc: "The conversation itself (with author's note and depth lore).", editable: "none" },
-  post_history: { label: "Post-history instructions", desc: "Sent after the history. Overridden by the character's post-history field.", editable: "full" },
+  post_history: { label: "Post-history instructions", desc: "Sent after the history; a strong last reminder. Overridden by the character's post-history field unless it contains {{original}}. Skipped when impersonating.", editable: "full" },
   custom: { label: "Custom block", desc: "Any text you like. Macros are supported.", editable: "full" },
 };
+
+const ROLES: { value: PromptBlock["role"]; label: string; desc: string }[] = [
+  { value: "system", label: "Instructions", desc: "Background and rules for the AI. Use this unless you have a reason not to." },
+  { value: "user", label: "Your message", desc: "Sent as if you wrote it in the chat." },
+  { value: "assistant", label: "AI message", desc: "Sent as if the AI already wrote it." },
+];
+const ROLE_LABEL = Object.fromEntries(ROLES.map((r) => [r.value, r.label])) as Record<PromptBlock["role"], string>;
 
 type Template = ProcOutput<"templates.list">[number];
 
@@ -230,7 +238,7 @@ function TemplatesTab() {
   }, [templates, sel, settings?.defaultTemplateId]);
   const current = templates?.find((t) => t.id === sel);
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 md:grid-cols-[260px_1fr] md:px-6">
+    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 md:grid-cols-[260px_minmax(0,1fr)] md:px-6">
       <div className="space-y-1.5">
         {templates?.map((t) => (
           <ListItem key={t.id} active={t.id === sel} onClick={() => setSel(t.id)} title={t.name} subtitle={`${t.blocks.filter((b) => b.enabled).length} blocks`} isDefault={settings?.defaultTemplateId === t.id} />
@@ -267,7 +275,7 @@ function TemplateEditor({ template, isDefault, onDeleted }: { template: Template
   const update = (id: string, patch: Partial<PromptBlock>) => setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)));
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <TextField className="min-w-60 flex-1" label="Template name" value={name} onChange={setName} />
         <SaveIndicator state={state} />
@@ -300,7 +308,20 @@ function TemplateEditor({ template, isDefault, onDeleted }: { template: Template
           <Trash2 />
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">Drag blocks to change the order they are sent in. Adjacent system blocks before the history are merged into one system message.</p>
+      <div className="surface-well space-y-1 rounded-lg px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+        <p>
+          Each block is one piece of the prompt the AI reads before replying, top to bottom. Click a block to edit its text, drag <GripVertical className="inline size-3.5 align-text-bottom" /> to reorder it, and use the switch to
+          include or leave it out.
+        </p>
+        <p>
+          <span className="font-medium text-foreground">Lower blocks have more impact.</span> The AI pays most attention to what it read last, so blocks below the chat history (like post-history instructions) steer
+          the next reply the most. Put important rules lower and background info higher.
+        </p>
+        <p>
+          <span className="font-medium text-foreground">Sent as</span> sets who the AI thinks wrote the block. Keep <span className="font-medium text-foreground">Instructions</span> for everything unless a model needs
+          otherwise.
+        </p>
+      </div>
       <Reorder.Group axis="y" values={blocks} onReorder={setBlocks} className="space-y-2">
         {blocks.map((b) => (
           <BlockRow key={b.id} block={b} onChange={(p) => update(b.id, p)} onRemove={() => setBlocks((bs) => bs.filter((x) => x.id !== b.id))} />
@@ -331,19 +352,30 @@ function BlockRow({ block, onChange, onRemove }: { block: PromptBlock; onChange:
           <div className="truncate text-sm font-medium">{block.label || info.label}</div>
           <div className="truncate text-xs text-muted-foreground">{info.desc}</div>
         </button>
-        <Select value={block.role} onValueChange={(v) => onChange({ role: v as PromptBlock["role"] })}>
-          <SelectTrigger size="sm" className="w-24" disabled={block.kind === "history"}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="system">system</SelectItem>
-            <SelectItem value="user">user</SelectItem>
-            <SelectItem value="assistant">assistant</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button variant="ghost" size="icon-sm" onClick={() => onChange({ enabled: !block.enabled })} aria-label={block.enabled ? "Disable" : "Enable"}>
-          {block.enabled ? <Eye /> : <EyeOff />}
-        </Button>
+        {block.kind !== "history" && (
+          <Select value={block.role} onValueChange={(v) => onChange({ role: v as PromptBlock["role"] })}>
+            <SelectTrigger size="sm" className="w-32 shrink-0" aria-label="Sent as" title="Sent as: who the AI thinks wrote this block">
+              <SelectValue>{(v: PromptBlock["role"]) => ROLE_LABEL[v] ?? v}</SelectValue>
+            </SelectTrigger>
+            <SelectContent className="w-64">
+              {ROLES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  <span className="flex flex-col items-start gap-0.5">
+                    <span>{r.label}</span>
+                    <span className="text-xs whitespace-normal text-muted-foreground">{r.desc}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Switch
+          checked={block.enabled}
+          onCheckedChange={(c) => onChange({ enabled: c })}
+          aria-label={block.enabled ? "Included in prompt" : "Left out of prompt"}
+          title={block.enabled ? "Included in the prompt. Switch off to leave it out." : "Left out of the prompt. Switch on to include it."}
+          className="shrink-0"
+        />
         {block.kind === "custom" && (
           <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove" className="text-muted-foreground hover:text-destructive">
             <Trash2 />
@@ -360,7 +392,7 @@ function BlockRow({ block, onChange, onRemove }: { block: PromptBlock; onChange:
                 onChange={(e) => onChange({ content: e.target.value })}
                 rows={info.editable === "full" ? 6 : 2}
                 placeholder={info.editable === "wrapper" ? "{{content}}" : ""}
-                className="surface-well field-sizing-content min-h-16 w-full rounded-lg px-3 py-2 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="surface-well field-sizing-content min-h-16 w-full max-w-full rounded-lg px-3 py-2 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               />
             </div>
           </motion.div>

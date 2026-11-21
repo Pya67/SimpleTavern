@@ -12,7 +12,10 @@ import {
   DEFAULT_TEMPLATE_BLOCKS,
   DEFAULT_UI,
   DEMO_CHARACTER,
+  LEGACY_BLOCK_CONTENT,
+  LEGACY_COMPACTION_PROMPTS,
 } from "@/lib/defaults";
+import type { PromptBlock } from "@/lib/types";
 import { setJobHandlers, startWorkers } from "@/lib/jobs/boss";
 import { runCompaction, runTitle } from "@/lib/memory/run";
 import { writeScheduledBackup } from "@/lib/backup";
@@ -31,9 +34,26 @@ setJobHandlers({
   },
 });
 
-const g = globalThis as unknown as { __booted?: Promise<void> };
+const g = globalThis as unknown as { __booted?: Promise<void>; __defaultsUpgrade?: Promise<void>; __defaultsVersion?: number };
 
-export function bootstrap() {
+/** Bump when migrations or shipped defaults change, so a running dev server applies them without a restart. */
+const DEFAULTS_VERSION = 3;
+
+export async function bootstrap() {
+  await bootOnce();
+  if (g.__defaultsVersion !== DEFAULTS_VERSION) {
+    await (g.__defaultsUpgrade ??= migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") })
+      .then(() => ensureDefaults())
+      .then(() => {
+        g.__defaultsVersion = DEFAULTS_VERSION;
+      })
+      .finally(() => {
+        g.__defaultsUpgrade = undefined;
+      }));
+  }
+}
+
+function bootOnce() {
   return (g.__booted ??= doBootstrap().catch((e) => {
     g.__booted = undefined;
     console.error("[bootstrap] failed", e);
@@ -49,6 +69,7 @@ async function doBootstrap() {
   }
   await migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
   await ensureDefaults();
+  g.__defaultsVersion = DEFAULTS_VERSION;
   // Messages left "streaming" by a crash/restart are marked stopped so they can be continued.
   await db.update(messages).set({ status: "stopped", finishReason: "interrupted", updatedAt: sql`updated_at` }).where(eq(messages.status, "streaming"));
   await startWorkers();
@@ -73,6 +94,20 @@ export async function ensureDefaults() {
   if (!anyTpl) {
     const [t] = await db.insert(promptTemplates).values({ name: "Default", blocks: DEFAULT_TEMPLATE_BLOCKS }).returning();
     patch.defaultTemplateId = t.id;
+  } else {
+    await upgradeTemplates();
+  }
+  // Upgrade compaction prompts the user never edited.
+  if (s.compaction) {
+    const c = { ...s.compaction };
+    let changed = false;
+    for (const key of ["prompt", "mergePrompt"] as const) {
+      if (c[key] === LEGACY_COMPACTION_PROMPTS[key]) {
+        c[key] = DEFAULT_COMPACTION[key];
+        changed = true;
+      }
+    }
+    if (changed) patch.compaction = c;
   }
   const [anyPersona] = await db.select({ id: personas.id }).from(personas).limit(1);
   if (!anyPersona) {
@@ -83,4 +118,21 @@ export async function ensureDefaults() {
   const [anyChar] = await db.select({ id: characters.id }).from(characters).limit(1);
   if (!anyChar) await db.insert(characters).values(DEMO_CHARACTER);
   if (Object.keys(patch).length) await db.update(settings).set(patch).where(eq(settings.id, 1));
+}
+
+/** Replace blocks that still hold a previous version's default text with the current default. Edited blocks are left alone. */
+async function upgradeTemplates() {
+  const defaults = new Map(DEFAULT_TEMPLATE_BLOCKS.map((b) => [b.kind, b]));
+  const all = await db.select().from(promptTemplates);
+  for (const t of all) {
+    let changed = false;
+    const blocks = (t.blocks as PromptBlock[]).map((b) => {
+      const legacy = LEGACY_BLOCK_CONTENT[b.kind];
+      const def = defaults.get(b.kind);
+      if (!legacy || !def || !legacy.includes(b.content)) return b;
+      changed = true;
+      return { ...b, content: def.content };
+    });
+    if (changed) await db.update(promptTemplates).set({ blocks }).where(eq(promptTemplates.id, t.id));
+  }
 }

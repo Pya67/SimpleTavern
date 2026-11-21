@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { chats, memoryChunks, messages, pinnedFacts, chatLorebooks, type Message } from "@/lib/db/schema";
+import { normalizeState, type EmotionState } from "@/lib/emotion/engine";
 
 export interface MessageView {
   id: string;
@@ -23,6 +24,7 @@ export interface MessageView {
   finishReason: string | null;
   bookmarked: boolean;
   hidden: boolean;
+  emotion: EmotionState | null;
   createdAt: string;
   updatedAt: string;
   depth: number;
@@ -50,6 +52,7 @@ interface Row {
   finish_reason: string | null;
   bookmarked: boolean;
   hidden: boolean;
+  emotion: EmotionState | null;
   created_at: Date;
   updated_at: Date;
   depth: number;
@@ -58,7 +61,7 @@ interface Row {
 }
 
 const COLS = sql.raw(
-  `id, chat_id, parent_id, active_child_id, role, persona_id, character_id, content, reasoning, status, error, model_id, prompt_tokens, completion_tokens, cost, gen_ms, ttft_ms, finish_reason, bookmarked, hidden, created_at, updated_at`,
+  `id, chat_id, parent_id, active_child_id, role, persona_id, character_id, content, reasoning, status, error, model_id, prompt_tokens, completion_tokens, cost, gen_ms, ttft_ms, finish_reason, bookmarked, hidden, emotion, created_at, updated_at`,
 );
 
 function toView(r: Row): MessageView {
@@ -82,6 +85,8 @@ function toView(r: Row): MessageView {
     finishReason: r.finish_reason,
     bookmarked: r.bookmarked,
     hidden: r.hidden,
+    // Normalized so older or partial readings (e.g. from before kaomoji faces) still render.
+    emotion: normalizeState(r.emotion),
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
     depth: Number(r.depth),
@@ -105,7 +110,7 @@ export async function getPath(
       UNION ALL
       SELECT m.id, m.chat_id, m.parent_id, m.active_child_id, m.role, m.persona_id, m.character_id, m.content,
              m.reasoning, m.status, m.error, m.model_id, m.prompt_tokens, m.completion_tokens, m.cost, m.gen_ms,
-             m.ttft_ms, m.finish_reason, m.bookmarked, m.hidden, m.created_at, m.updated_at, p.depth + 1
+             m.ttft_ms, m.finish_reason, m.bookmarked, m.hidden, m.emotion, m.created_at, m.updated_at, p.depth + 1
         FROM messages m JOIN path p ON m.id = p.active_child_id AND m.parent_id = p.id
         WHERE p.depth < 200000
     ),
@@ -278,6 +283,8 @@ export async function forkChat(chatId: string, uptoMessageId: string) {
       personaId: chat.personaId,
       authorsNote: chat.authorsNote,
       authorsNoteDepth: chat.authorsNoteDepth,
+      emotionEnabled: chat.emotionEnabled,
+      emotionBaseline: chat.emotionBaseline,
       forkedFromChatId: chat.id,
     })
     .returning();
@@ -308,6 +315,7 @@ export async function forkChat(chatId: string, uptoMessageId: string) {
       finishReason: m.finishReason,
       bookmarked: m.bookmarked,
       hidden: m.hidden,
+      emotion: m.emotion,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
     });

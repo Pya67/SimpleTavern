@@ -35,6 +35,8 @@ interface ChatState {
    * about a screen of room, so it grows into empty space instead of pushing the conversation around.
    */
   reserveDepth: number | null;
+  /** Assistant messages whose emotion the engine is reading right now. */
+  emotionPending: string[];
 }
 
 export const useChat = create<ChatState>(() => ({
@@ -50,6 +52,7 @@ export const useChat = create<ChatState>(() => ({
   highlightId: null,
   jumpTo: null,
   reserveDepth: null,
+  emotionPending: [],
 }));
 
 /** Fast-changing stream buffer, kept separate so only the streaming message re-renders. */
@@ -150,6 +153,7 @@ function optimistic(partial: Partial<MessageV> & Pick<MessageV, "id" | "role" | 
     finishReason: null,
     bookmarked: false,
     hidden: false,
+    emotion: null,
     createdAt: now,
     updatedAt: now,
     siblingIds: [partial.id],
@@ -262,6 +266,8 @@ export async function generate(opts: GenerateOpts) {
             } else if (ev.message) {
               useStream.setState({ done: true });
               replaceMessage(ev.message);
+              // A continued reply changed, so its reading is redone.
+              if (ev.message.role === "assistant") void appraise(ev.message.id, opts.mode === "continue");
             }
             break;
           case "error": {
@@ -292,6 +298,24 @@ export async function generate(opts: GenerateOpts) {
     useStream.setState({ done: true });
     onChanged?.();
   }
+}
+
+/** Ask the emotion engine to read an assistant message (returns nothing when it's off for the chat). */
+export async function appraise(id: string, force = false) {
+  const chatId = useChat.getState().chatId;
+  useChat.setState((s) => ({ emotionPending: [...s.emotionPending, id] }));
+  try {
+    const { emotion } = await rpc("emotion.appraise", { messageId: id, force });
+    if (emotion && useChat.getState().chatId === chatId) setEmotion(id, emotion);
+  } catch (e) {
+    if (force) toast.error("Couldn't read the mood", { description: (e as Error).message });
+  } finally {
+    useChat.setState((s) => ({ emotionPending: s.emotionPending.filter((x) => x !== id) }));
+  }
+}
+
+export function setEmotion(id: string, emotion: MessageV["emotion"]) {
+  useChat.setState((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, emotion } : m)) }));
 }
 
 function rollbackOptimistic() {

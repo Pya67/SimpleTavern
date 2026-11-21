@@ -30,6 +30,8 @@ import { buildForContext, loadChatContext, pathForMemory } from "@/lib/chat/cont
 import { effectiveChunks, isChunkValid } from "@/lib/memory/compaction";
 import { compactionStatus, regenerateChunk } from "@/lib/memory/run";
 import { enqueue } from "@/lib/jobs/boss";
+import { appraiseMessage, resetEmotion } from "@/lib/emotion/run";
+import { EMOTIONS, normalizeState } from "@/lib/emotion/engine";
 import { countTokens } from "@/lib/tokens.server";
 import type { CompactionSettings, PresetParams, PromptBlock, UiPrefs } from "@/lib/types";
 import { REASONING_EFFORTS, type ReasoningEffort, type ModelPrefs } from "@/lib/types";
@@ -429,6 +431,7 @@ const chatProcs = {
     if (!chat) throw new RpcError("Chat not found", 404);
     const [character] = await db.select().from(characters).where(eq(characters.id, chat.characterId));
     const lbs = await db.select({ id: chatLorebooks.lorebookId }).from(chatLorebooks).where(eq(chatLorebooks.chatId, chatId));
+    const charLbs = await db.select({ id: characterLorebooks.lorebookId }).from(characterLorebooks).where(eq(characterLorebooks.characterId, chat.characterId));
     const s = await getSettings();
     const effectivePresetId = chat.presetId ?? character.defaultPresetId ?? s?.defaultPresetId ?? null;
     const effectivePersonaId = chat.personaId ?? character.defaultPersonaId ?? s?.defaultPersonaId ?? null;
@@ -437,6 +440,8 @@ const chatProcs = {
       chat,
       character,
       lorebookIds: lbs.map((l) => l.id),
+      /** Lorebooks linked to the character; always active in its chats. */
+      characterLorebookIds: charLbs.map((l) => l.id),
       effectivePresetId,
       effectivePersonaId,
       effectiveTemplateId,
@@ -460,6 +465,7 @@ const chatProcs = {
       authorsNote: z.string().optional(),
       authorsNoteDepth: z.number().int().min(0).max(100).optional(),
       lorebookIds: z.array(id).optional(),
+      emotionEnabled: z.boolean().optional(),
     }),
     async ({ id: chatId, lorebookIds, ...rest }) => {
       if (Object.keys(rest).length) await db.update(chats).set(rest).where(eq(chats.id, chatId));
@@ -721,6 +727,33 @@ const searchProcs = {
   }),
 };
 
+// ---------------- emotion engine ----------------
+
+const emotionVector = z.object(Object.fromEntries(EMOTIONS.map((e) => [e, z.number().min(0).max(100)])) as Record<(typeof EMOTIONS)[number], z.ZodNumber>);
+
+const emotionProcs = {
+  /** Read (or re-read with `force`) how {{char}} feels after an assistant message. Null when the engine is off. */
+  "emotion.appraise": proc(z.object({ messageId: id, force: z.boolean().optional() }), async ({ messageId, force }) => ({
+    emotion: await appraiseMessage(messageId, { force }),
+  })),
+  /** Hand-edit the state stored on a message; later replies build on it. */
+  "emotion.set": proc(
+    z.object({
+      messageId: id,
+      state: z.object({ v: emotionVector, affection: z.number().min(-100).max(100), label: z.string().max(40), kaomoji: z.string().max(40), note: z.string().max(240) }),
+    }),
+    async ({ messageId, state }) => {
+      const m = await getMessage(messageId);
+      if (!m || m.role !== "assistant") throw new RpcError("Only character replies carry an emotion state", 400);
+      const clean = normalizeState({ ...state, manual: true })!;
+      await db.update(messages).set({ emotion: clean, ...keep }).where(eq(messages.id, messageId));
+      return { emotion: clean };
+    },
+  ),
+  /** Re-estimate the character's temperament and restart feelings from it. */
+  "emotion.reset": proc(z.object({ chatId: id }), async ({ chatId }) => resetEmotion(chatId)),
+};
+
 export const procedures = {
   ...settingsProcs,
   ...personaProcs,
@@ -731,6 +764,7 @@ export const procedures = {
   ...directoryProcs,
   ...messageProcs,
   ...memoryProcs,
+  ...emotionProcs,
   ...searchProcs,
 };
 

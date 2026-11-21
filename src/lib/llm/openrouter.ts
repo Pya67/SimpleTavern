@@ -44,7 +44,7 @@ export async function getProvider() {
     baseURL: baseUrl(),
     fetch: isMock() ? mockFetch : undefined,
     // Generic attribution; never send personal details.
-    appName: "Sussy Tavern",
+    appName: "SimpleTavern",
     appUrl: "https://github.com/",
   });
 }

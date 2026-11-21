@@ -92,13 +92,14 @@ export function ModelPicker({ value, onChange, className, variant = "default" }:
           render={
             <button
               aria-label="Choose model"
-              className={cn("flex h-8 min-w-0 max-w-52 items-center gap-1.5 rounded-lg px-2.5 text-xs text-foreground outline-none transition-colors hover:bg-foreground/8 focus-visible:ring-2 focus-visible:ring-ring/60 max-md:h-9 max-[360px]:gap-1 max-[360px]:px-1.5", className)}
+              className={cn("flex h-8 min-w-0 max-w-52 items-center gap-1.5 rounded-lg px-2.5 text-xs text-foreground outline-none transition-colors hover:bg-foreground/8 focus-visible:ring-2 focus-visible:ring-ring/60 max-md:size-9 max-md:shrink-0 max-md:justify-center max-md:px-0", className)}
             />
           }
         >
-          <ModelLogo m={current ?? { id: value, name: "" }} className="size-3.5 max-[360px]:hidden" />
-          <span className="truncate font-medium">{current ? shortModelName(current) : value.split("/").pop()}</span>
-          <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground max-[360px]:size-2.5" />
+          {/* Mobile shows just the logo; the name and chevron appear from md up. */}
+          <ModelLogo m={current ?? { id: value, name: "" }} className="size-3.5 max-md:size-[18px]" />
+          <span className="truncate font-medium max-md:hidden">{current ? shortModelName(current) : value.split("/").pop()}</span>
+          <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground max-md:hidden" />
         </PopoverTrigger>
       ) : (
         <PopoverTrigger render={<Button variant="outline" className={cn("h-auto min-h-9 w-full justify-between gap-2 py-1.5 text-left font-normal", className)} />}>

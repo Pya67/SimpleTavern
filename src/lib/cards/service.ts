@@ -8,6 +8,7 @@ import { characterLorebooks, characters, lorebookEntries, lorebooks } from "@/li
 import { env } from "@/lib/env";
 import { parseCardFile, toCardV3, type ParsedBook } from "@/lib/cards/card";
 import { b64encodeUtf8, isPng, writeTextChunks } from "@/lib/cards/png";
+import { parseJanitorData, parseJanitorLorebook, type JanitorLorebookImport } from "@/lib/cards/janitor";
 import { colorFor } from "@/lib/format";
 
 async function saveAvatarFromPng(buf: Uint8Array) {
@@ -37,6 +38,58 @@ export async function importCardFile(buf: Uint8Array, filename: string) {
     await db.insert(characterLorebooks).values({ characterId: c.id, lorebookId: b.id });
   }
   return { id: c.id, name: c.name, spec: parsed.spec, lorebook: bookId, entries: parsed.book?.entries.length ?? 0 };
+}
+
+/** Imports JanitorAI character JSON sent by the userscript (see lib/cards/janitor.ts). */
+export async function importJanitorData(data: unknown) {
+  const j = parseJanitorData(data);
+  const avatar = j.avatarUrl ? await downloadAvatar(j.avatarUrl).catch(() => null) : null;
+  const [c] = await db
+    .insert(characters)
+    .values({ ...j.character, avatar, tagline: j.tagline })
+    .returning();
+  const lorebookNames: string[] = [];
+  for (const book of j.lorebooks) {
+    const saved = await saveJanitorLorebook(book);
+    await db.insert(characterLorebooks).values({ characterId: c.id, lorebookId: saved.id }).onConflictDoNothing();
+    lorebookNames.push(saved.name);
+  }
+  return { id: c.id, name: c.name, definitionHidden: j.definitionHidden, avatar: !!avatar, lorebooks: lorebookNames, skippedLorebooks: j.skippedLorebooks };
+}
+
+/** Imports a JanitorAI lorebook sent by the userscript. */
+export async function importJanitorLorebook(data: unknown) {
+  const saved = await saveJanitorLorebook(parseJanitorLorebook(data));
+  return { id: saved.id, name: saved.name, entries: saved.entries, existing: saved.existing };
+}
+
+/** Saves a JanitorAI lorebook, or reuses the copy imported earlier (matched by its JanitorAI URL) so it isn't duplicated. */
+async function saveJanitorLorebook({ book, source }: JanitorLorebookImport) {
+  const [old] = await db.select({ id: lorebooks.id, name: lorebooks.name }).from(lorebooks).where(eq(lorebooks.source, source)).limit(1);
+  if (old) {
+    const entries = await db.select({ id: lorebookEntries.id }).from(lorebookEntries).where(eq(lorebookEntries.lorebookId, old.id));
+    return { id: old.id, name: old.name, entries: entries.length, existing: true };
+  }
+  return db.transaction(async (tx) => {
+    const [b] = await tx
+      .insert(lorebooks)
+      .values({ name: book.name, description: book.description, scanDepth: book.scanDepth, tokenBudget: book.tokenBudget, recursive: book.recursive, source })
+      .returning();
+    if (book.entries.length) await tx.insert(lorebookEntries).values(book.entries.map((e) => ({ ...e, lorebookId: b.id })));
+    return { id: b.id, name: b.name, entries: book.entries.length, existing: false };
+  });
+}
+
+const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
+
+async function downloadAvatar(url: string) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(20_000), cache: "no-store" });
+  if (!res.ok) throw new Error(`avatar ${res.status}`);
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_AVATAR_BYTES) throw new Error("avatar too large");
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > MAX_AVATAR_BYTES) throw new Error("avatar too large");
+  // sharp reads webp/jpeg/png alike and re-encodes, so nothing from the remote file is stored as-is.
+  return saveAvatarFromPng(buf);
 }
 
 async function bookForCharacter(characterId: string): Promise<ParsedBook | null> {

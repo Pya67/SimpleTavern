@@ -1,6 +1,6 @@
 "use client";
 import { memo, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, animate, motion, useIsPresent, useMotionValue, useTransform, type MotionValue, type PanInfo } from "motion/react";
 import { cn } from "cn";
 import { toast } from "sonner";
 import {
@@ -8,11 +8,9 @@ import {
   Bookmark,
   BookmarkCheck,
   Brain,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   EyeOff,
   FastForward,
   GitBranch,
@@ -33,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { rpc, type ProcOutput } from "@/lib/client/rpc";
 import { EntityAvatar } from "@/components/common/avatar";
 import { CHUNK_ANIM_MS, Markdown } from "@/components/chat/markdown";
+import { EmotionChip } from "@/components/chat/emotion";
 import { MarkdownTextarea } from "@/components/common/markdown-textarea";
 import {
   deleteMessage,
@@ -62,6 +61,9 @@ export interface MessageCtx {
   onInspect: (id: string) => void;
   onFork: (id: string) => void;
   onPinFact: (m: MessageV) => void;
+  /** Emotion engine is on for this chat: show mood chips on replies. */
+  emotionEnabled: boolean;
+  onOpenEmotion: () => void;
 }
 
 function IconBtn({ label, onClick, children, active }: { label: string; onClick: () => void; children: React.ReactNode; active?: boolean }) {
@@ -90,6 +92,7 @@ export const MessageItem = memo(function MessageItem({ msg, isLast, ctx }: { msg
   const editing = useChat((s) => s.editingId === msg.id);
   const generating = useChat((s) => !!s.generating);
   const highlighted = useChat((s) => s.highlightId === msg.id);
+  const emotionPending = useChat((s) => s.emotionPending.includes(msg.id));
   // Keep the streaming view until its reveal animation has caught up, even after the stream ends.
   const streamingThis = useStream((s) => s.id === msg.id && (!s.done || !s.revealed));
   const isUser = msg.role === "user";
@@ -98,14 +101,22 @@ export const MessageItem = memo(function MessageItem({ msg, isLast, ctx }: { msg
   const name = isUser ? (persona?.name ?? "You") : isSystem ? "Narrator" : ctx.character.name;
   const book = ctx.layout === "book";
   const avatarPx = book ? Math.round(ctx.avatarSize * 0.75) : ctx.avatarSize;
-  const [copied, setCopied] = useState(false);
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(msg.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  };
-
+  // Your own messages drag as a whole row (avatar, name, bubble, actions): pull left to edit,
+  // right to step back to the previous branch.
+  const rowSwipe = useSwipeDrag({
+    enabled: isUser && !editing && !msg.id.startsWith("tmp-"),
+    canPrev: msg.siblingIds.indexOf(msg.id) > 0,
+    canNext: true,
+    onSwipe: (d) => {
+      if (d === 1) {
+        useChat.setState({ editingId: msg.id });
+        return "back";
+      }
+      if (useChat.getState().generating) return false;
+      void selectSibling(msg, -1);
+      return "back";
+    },
+  });
   if (isSystem) {
     return (
       <div className="group/msg relative mx-auto flex max-w-[680px] items-center gap-3 px-4 py-2">
@@ -132,29 +143,34 @@ export const MessageItem = memo(function MessageItem({ msg, isLast, ctx }: { msg
     <EntityAvatar name={ctx.character.name} src={ctx.character.avatar} color={ctx.character.color} size={avatarPx} />
   );
 
-  const toolbar = !editing && msg.status !== "streaming" && (
-    <div
-      className={cn(
-        "flex items-center gap-0.5 rounded-lg opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100 max-md:opacity-100",
-        isUser && !book && "flex-row-reverse",
-      )}
-    >
-      <IconBtn label={copied ? "Copied" : "Copy"} onClick={copy}>
-        {copied ? <Check /> : <Copy />}
-      </IconBtn>
-      <IconBtn label="Edit" onClick={() => useChat.setState({ editingId: msg.id })}>
-        <Pencil />
-      </IconBtn>
-      {!isUser && msg.parentId && (
+  const showToolbar = !editing && msg.status !== "streaming";
+  const toolbarCls = cn(
+    "flex items-center gap-0.5 rounded-lg opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100 max-md:opacity-100",
+    isUser && !book && "flex-row-reverse",
+  );
+  const canRegen = !isUser && !!msg.parentId;
+  const canContinue = !isUser && isLast;
+  // Generation actions: on mobile they share the first row with the version arrows.
+  const genActions = showToolbar && (canRegen || canContinue) && (
+    <div className={toolbarCls}>
+      {canRegen && (
         <IconBtn label="Regenerate" onClick={() => generate({ mode: "regenerate", targetId: msg.id })}>
           <RefreshCw />
         </IconBtn>
       )}
-      {!isUser && isLast && (
+      {canContinue && (
         <IconBtn label="Continue" onClick={() => generate({ mode: "continue", targetId: msg.id })}>
           <FastForward />
         </IconBtn>
       )}
+    </div>
+  );
+
+  const toolbar = showToolbar && (
+    <div className={toolbarCls}>
+      <IconBtn label="Edit" onClick={() => useChat.setState({ editingId: msg.id })}>
+        <Pencil />
+      </IconBtn>
       <IconBtn label={msg.bookmarked ? "Remove bookmark" : "Bookmark"} active={msg.bookmarked} onClick={() => patchMessage(msg, { bookmarked: !msg.bookmarked })}>
         {msg.bookmarked ? <BookmarkCheck /> : <Bookmark />}
       </IconBtn>
@@ -238,19 +254,24 @@ export const MessageItem = memo(function MessageItem({ msg, isLast, ctx }: { msg
   return (
     <div
       className={cn(
-        "group/msg relative px-3 py-2.5 md:px-6",
+        // Clip sideways so a swiped bubble flies off without a horizontal scrollbar.
+        "group/msg relative overflow-x-clip px-3 py-2.5 md:px-6",
         msg.hidden && "opacity-50",
         "transition-colors duration-700",
         highlighted && "rounded-xl bg-brand/6",
       )}
       data-message-id={msg.id}
     >
-      <div className={cn("mx-auto flex w-full max-w-(--chat-width) gap-3", isUser && !book && "flex-row-reverse")}>
+      <motion.div {...(isUser ? rowSwipe.bind : {})} className={cn("relative mx-auto flex w-full max-w-(--chat-width) gap-3", isUser && !book && "flex-row-reverse")}>
+        {isUser && <SwipeHintIcon x={rowSwipe.x} kind="edit" />}
         <div className="shrink-0">{avatar}</div>
         <div className={cn("flex min-w-0 flex-1 flex-col", isUser && !book && "items-end")}>
           {/* Name sits level with the top of the avatar; stats live in the row under the message. */}
           <div className={cn("mb-1 flex min-h-6 items-center gap-2", isUser && !book && "flex-row-reverse")}>
             <span className={cn("font-semibold leading-tight text-foreground", book ? "text-sm" : "text-[15px]")}>{name}</span>
+            {msg.role === "assistant" && ctx.emotionEnabled && !streamingThis && (
+              <EmotionChip emotion={msg.emotion} pending={emotionPending} onOpenPanel={ctx.onOpenEmotion} />
+            )}
             {msg.hidden && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <EyeOff className="size-3" /> hidden
@@ -258,69 +279,214 @@ export const MessageItem = memo(function MessageItem({ msg, isLast, ctx }: { msg
             )}
             {msg.bookmarked && <BookmarkCheck className="size-3.5 text-brand" />}
           </div>
-          <div
-            className={cn(
-              "relative min-w-0",
-              !book && isUser ? "max-w-[min(85%,640px)]" : "w-full",
-              // Your messages sit in a soft, theme-tinted bubble tucked under the avatar.
-              !book && isUser && "grain bubble-user rounded-2xl rounded-tr-md bg-bubble-user px-4 py-2.5",
-              isUser && "user-msg",
-            )}
-          >
-            <SwipeSlide msg={msg} isLast={isLast}>{body}</SwipeSlide>
-          </div>
-          <div className={cn("mt-1 flex min-h-7 items-center gap-1", isUser && !book && "flex-row-reverse")}>
-            {showSwipes && <SwipeControls msg={msg} isLast={isLast} disabled={generating} />}
+          {/* The whole bubble slides, so a touch swipe moves it as one piece. */}
+          <SwipeSlide msg={msg} isLast={isLast} alignEnd={isUser && !book}>
+            <div
+              className={cn(
+                "relative min-w-0",
+                !book && isUser ? "max-w-[min(85%,640px)]" : "w-full",
+                // Your messages sit in a soft, theme-tinted bubble tucked under the avatar.
+                !book && isUser && "grain bubble-user rounded-2xl rounded-tr-md bg-bubble-user px-4 py-2.5",
+                isUser && "user-msg",
+              )}
+            >
+              {body}
+            </div>
+          </SwipeSlide>
+          <div className={cn("mt-1 flex min-h-7 items-center gap-1 max-md:flex-wrap max-md:gap-y-0.5", isUser && !book && "flex-row-reverse")}>
+            {showSwipes && <SwipeControls msg={msg} disabled={generating} />}
+            {genActions}
+            {/* Mobile: break here so edit / bookmark / more sit on a second row. */}
+            {(showSwipes || genActions) && toolbar && <div className="basis-full md:hidden" aria-hidden />}
             {toolbar}
             {ctx.showStats && !isUser && msg.status === "complete" && !editing && <Stats msg={msg} />}
             {/* Live speed/time sits in this fixed-height row, so it never changes the message's height. */}
             {!isUser && streamingThis && <StreamStats id={msg.id} />}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 });
 
-function SwipeSlide({ msg, isLast, children }: { msg: MessageV; isLast: boolean; children: React.ReactNode }) {
+/** How far (px) a touch swipe must travel before letting go switches versions. */
+const SWIPE_AT = 72;
+const SPRING = { type: "spring", stiffness: 500, damping: 40 } as const;
+type SlideAnim = { d: number; fling: boolean };
+/** "fly": the version is switching, let it exit. "back": an action ran in place, spring home. false: nothing happened. */
+type SwipeResult = "fly" | "back" | false;
+/** What pulling left will do, shown as an icon riding in from the right edge. */
+type SwipeHint = "regen" | "edit" | null;
+
+const slideVariants = {
+  // A swipe that went through flies fully off-screen; arrow/button switches keep the short nudge.
+  enter: ({ d, fling }: SlideAnim) => ({ opacity: 0, x: d * (fling ? 120 : 48) }),
+  center: { opacity: 1, x: 0 },
+  exit: ({ d, fling }: SlideAnim) =>
+    fling
+      ? { opacity: 0, x: d * -(typeof window === "undefined" ? 480 : window.innerWidth), transition: { duration: 0.22, ease: "easeIn" as const } }
+      : { opacity: 0, x: d * -48 },
+};
+
+function SwipeSlide({ msg, isLast, alignEnd, children }: { msg: MessageV; isLast: boolean; alignEnd: boolean; children: React.ReactNode }) {
   const dir = useChat((s) => s.swipeDir[msg.depth] ?? 0);
+  const [fling, setFling] = useState(false);
+  const idx = Math.max(0, msg.siblingIds.indexOf(msg.id));
   // Key by version slot, not id: the optimistic "tmp-" id is swapped for the real one mid-stream,
   // and that must not replay the enter animation.
-  const slot = `${msg.depth}:${Math.max(0, msg.siblingIds.indexOf(msg.id))}`;
-  const canSwipe = msg.siblingIds.length > 1 || (msg.role === "assistant" && isLast && !!msg.parentId);
+  const slot = `${msg.depth}:${idx}`;
+  // Your own messages are dragged as a whole row by MessageItem instead.
+  const draggable = msg.role === "assistant";
+  const canGenerate = msg.role === "assistant" && isLast && !!msg.parentId;
+  const atEnd = idx >= msg.siblingIds.length - 1;
+  const custom: SlideAnim = { d: dir, fling };
+
+  const swipe = (d: 1 | -1): SwipeResult => {
+    if (msg.id.startsWith("tmp-") || useChat.getState().generating) return false;
+    setFling(true);
+    // Regenerating doesn't set a direction itself; the new version should come in from the right.
+    useChat.setState((st) => ({ swipeDir: { ...st.swipeDir, [msg.depth]: d } }));
+    void selectSibling(msg, d);
+    return "fly";
+  };
+
   return (
-    <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-      <motion.div
-        // Touch swipe between versions (horizontal pan; mouse drags are ignored so text stays selectable).
-        onPanEnd={(e, info) => {
-          if (!canSwipe || (e as PointerEvent).pointerType !== "touch") return;
-          if (Math.abs(info.offset.x) < 60 || Math.abs(info.offset.y) > 40) return;
-          void selectSibling(msg, info.offset.x < 0 ? 1 : -1);
-        }}
-        style={{ touchAction: canSwipe ? "pan-y" : undefined }}
-        key={slot}
-        custom={dir}
-        variants={{
-          enter: (d: number) => ({ opacity: 0, x: d * 48 }),
-          center: { opacity: 1, x: 0 },
-          exit: (d: number) => ({ opacity: 0, x: d * -48 }),
-        }}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        transition={{ type: "spring", stiffness: 500, damping: 40 }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <div className={cn("relative w-full min-w-0", alignEnd && "flex flex-col items-end")}>
+      <AnimatePresence mode="popLayout" initial={false} custom={custom} onExitComplete={() => setFling(false)}>
+        <Slide
+          key={slot}
+          custom={custom}
+          alignEnd={alignEnd}
+          enabled={draggable}
+          canPrev={idx > 0}
+          canNext={!atEnd || canGenerate}
+          nextHint={atEnd && canGenerate ? "regen" : null}
+          onSwipe={swipe}
+        >
+          {children}
+        </Slide>
+      </AnimatePresence>
+    </div>
   );
 }
 
-function SwipeControls({ msg, isLast, disabled }: { msg: MessageV; isLast: boolean; disabled: boolean }) {
+/**
+ * Touch-swipe behaviour for a motion element: it follows the finger horizontally (rubber-banding
+ * where there's nothing to swipe to), springs back on a short swipe, and on a long one calls
+ * `onSwipe` (1 = pulled left, -1 = pulled right). Mouse drags are ignored so text stays selectable.
+ * Spread `bind` onto a motion element.
+ */
+function useSwipeDrag({ enabled, canPrev, canNext, onSwipe }: { enabled: boolean; canPrev: boolean; canNext: boolean; onSwipe: (d: 1 | -1) => SwipeResult }) {
+  const x = useMotionValue(0);
+  const axis = useRef<"x" | "y" | null>(null);
+  const armed = useRef(false);
+  const present = useIsPresent();
+  const presentRef = useRef(present);
+  useEffect(() => {
+    presentRef.current = present;
+  }, [present]);
+  const active = enabled && (canPrev || canNext);
+  // Past the ends it still gives a little so the swipe doesn't feel dead.
+  const resist = (dx: number) => ((dx < 0 && !canNext) || (dx > 0 && !canPrev) ? dx * 0.2 : dx);
+  const settle = () => void animate(x, 0, SPRING);
+
+  const bind = {
+    style: { x, touchAction: active ? ("pan-y" as const) : undefined },
+    onPanStart: (e: PointerEvent, info: PanInfo) => {
+      axis.current = active && e.pointerType === "touch" && present && Math.abs(info.offset.x) > Math.abs(info.offset.y) ? "x" : "y";
+      armed.current = false;
+    },
+    onPan: (_: PointerEvent, info: PanInfo) => {
+      if (axis.current !== "x") return;
+      const dx = resist(info.offset.x);
+      x.set(dx);
+      const past = Math.abs(dx) >= SWIPE_AT;
+      if (past !== armed.current) {
+        armed.current = past;
+        // A tiny tick where supported (Android) when the swipe will go through.
+        if (past) navigator.vibrate?.(8);
+      }
+    },
+    onPanEnd: (_: PointerEvent, info: PanInfo) => {
+      if (axis.current !== "x") return;
+      axis.current = null;
+      const dx = info.offset.x;
+      const d = dx < 0 ? 1 : -1;
+      const allowed = d === 1 ? canNext : canPrev;
+      const flicked = Math.abs(info.velocity.x) > 600 && Math.abs(dx) > 24 && Math.sign(info.velocity.x) === Math.sign(dx);
+      const result = allowed && (Math.abs(dx) >= SWIPE_AT || flicked) ? onSwipe(d) : false;
+      if (result === "fly") {
+        // Normally the element exits now; if nothing changed (e.g. the request failed), come back.
+        setTimeout(() => presentRef.current && settle(), 1500);
+        return;
+      }
+      settle();
+    },
+  };
+  return { x, bind };
+}
+
+/** Trails the dragged element's right edge as you pull it left; the refresh icon spins, the pencil just grows. */
+function SwipeHintIcon({ x, kind }: { x: MotionValue<number>; kind: "regen" | "edit" }) {
+  const opacity = useTransform(x, [-SWIPE_AT, -12], [1, 0]);
+  const rotate = useTransform(x, [-SWIPE_AT * 1.5, 0], [270, 0]);
+  const scale = useTransform(x, [-SWIPE_AT, -SWIPE_AT * 0.6], [1.15, 0.85]);
+  return (
+    <motion.span
+      aria-hidden
+      style={{ opacity, rotate: kind === "regen" ? rotate : 0, scale }}
+      className="pointer-events-none absolute left-full top-1/2 ml-4 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-brand/15 text-brand"
+    >
+      {kind === "regen" ? <RefreshCw className="size-4" /> : <Pencil className="size-4" />}
+    </motion.span>
+  );
+}
+
+/** One version of a reply: draggable on touch, and flies out when a swipe switches versions. */
+function Slide({
+  ref,
+  custom,
+  alignEnd,
+  enabled,
+  canPrev,
+  canNext,
+  nextHint,
+  onSwipe,
+  children,
+}: {
+  ref?: React.Ref<HTMLDivElement>;
+  custom: SlideAnim;
+  alignEnd: boolean;
+  enabled: boolean;
+  canPrev: boolean;
+  canNext: boolean;
+  nextHint: SwipeHint;
+  onSwipe: (d: 1 | -1) => SwipeResult;
+  children: React.ReactNode;
+}) {
+  const { x, bind } = useSwipeDrag({ enabled, canPrev, canNext, onSwipe });
+  return (
+    <motion.div
+      ref={ref}
+      custom={custom}
+      variants={slideVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      transition={SPRING}
+      {...bind}
+      className={cn("relative w-full min-w-0", alignEnd && "flex flex-col items-end")}
+    >
+      {children}
+      {nextHint && <SwipeHintIcon x={x} kind={nextHint} />}
+    </motion.div>
+  );
+}
+
+function SwipeControls({ msg, disabled }: { msg: MessageV; disabled: boolean }) {
   const idx = msg.siblingIds.indexOf(msg.id);
   const count = msg.siblingIds.length;
   const atEnd = idx === count - 1;
-  const canGenerate = msg.role === "assistant" && isLast && !!msg.parentId;
   return (
     <div className="flex items-center rounded-lg text-xs text-muted-foreground">
       <button
@@ -335,12 +501,13 @@ function SwipeControls({ msg, isLast, disabled }: { msg: MessageV; isLast: boole
         {Math.max(1, idx + 1)}/{Math.max(1, count)}
       </VersionPicker>
       <button
-        disabled={disabled || (atEnd && !canGenerate)}
+        // The toolbar's Regenerate button makes new versions; this arrow only steps through existing ones.
+        disabled={disabled || atEnd}
         onClick={() => selectSibling(msg, 1)}
         className="flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-        aria-label={atEnd ? "Generate another" : "Next version"}
+        aria-label="Next version"
       >
-        {atEnd && canGenerate ? <RefreshCw className="size-3.5" /> : <ChevronRight className="size-4" />}
+        <ChevronRight className="size-4" />
       </button>
       {msg.role === "user" && count > 1 && <GitBranch className="ml-0.5 size-3 opacity-60" />}
     </div>

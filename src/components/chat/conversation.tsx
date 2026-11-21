@@ -54,6 +54,21 @@ export function Conversation({ ctx, lastCoveredDepth, tagline }: { ctx: MessageC
     if (idx >= 0) requestAnimationFrame(() => virtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" }));
   }, [jumpTo, virtualizer]);
 
+  // Sending always brings you to the bottom, even if you were reading further up.
+  // (followOnAppend only follows when you're already there.)
+  const sendToken = useChat((s) => (s.generating?.mode === "send" ? s.generating.abort : null));
+  useEffect(() => {
+    if (!sendToken) return;
+    let raf = requestAnimationFrame(() => {
+      // Wait a second frame so the new messages are measured before scrolling.
+      raf = requestAnimationFrame(() => {
+        virtualizer.scrollToEnd({ behavior: "smooth" });
+        setUnread(0);
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sendToken, virtualizer]);
+
   // Unread counter for the jump pill.
   useEffect(() => {
     if (messages.length > lastCount.current && !atEnd) setUnread((u) => u + (messages.length - lastCount.current));

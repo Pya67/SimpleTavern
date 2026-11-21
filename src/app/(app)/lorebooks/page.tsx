@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { BookOpen, ChevronDown, FlaskConical, Plus, Trash2, Zap } from "lucide-react";
+import { BookOpen, ChevronDown, FlaskConical, Link2, Plus, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/common/empty-state";
 import { confirmDialog } from "@/components/common/confirm";
+import { JanitorSetupDialog, postJanitorImport, useJanitorHandoff } from "@/components/common/janitor-import";
 import { FieldLabel, SaveIndicator, TextField } from "@/components/editors/field";
 import { useAutosave } from "@/hooks/use-autosave";
 import { qk, useLorebooks } from "@/lib/client/queries";
@@ -30,6 +31,21 @@ export default function LorebooksPage() {
     if (books && (!sel || !books.some((b) => b.id === sel))) setSel(books[0]?.id ?? null);
   }, [books, sel]);
 
+  const [janitorOpen, setJanitorOpen] = useState(false);
+  useJanitorHandoff("/lorebooks", "lorebook", async (data) => {
+    const title = String(data.title || "this lorebook").slice(0, 120);
+    const ok = await confirmDialog({ title: `Import “${title}”?`, description: "Sent from JanitorAI by the Send to SimpleTavern userscript.", confirmLabel: "Import" });
+    if (!ok) return;
+    const t = toast.loading(`Importing ${title}…`);
+    const r = await postJanitorImport<{ id: string; name: string; entries: number; existing: boolean }>("/api/lorebooks/import-janitor", data);
+    toast.dismiss(t);
+    if (!r.ok) return void toast.error(r.error);
+    await qc.invalidateQueries({ queryKey: qk.lorebooks });
+    setSel(r.id);
+    if (r.existing) toast.info(`You already have “${r.name}”`, { description: "Opened your existing copy instead of importing a duplicate. Delete it first to import a fresh copy." });
+    else toast.success(`Imported “${r.name}”`, { description: `${r.entries} ${r.entries === 1 ? "entry" : "entries"}. Link it to a character, or check it in a chat's Lore panel.` });
+  });
+
   const create = async () => {
     const b = await rpc("lorebooks.create", { name: "New lorebook" });
     await qc.invalidateQueries({ queryKey: qk.lorebooks });
@@ -42,11 +58,17 @@ export default function LorebooksPage() {
         title="Lorebooks"
         description="World info that's injected when keywords come up."
         actions={
-          <Button size="sm" onClick={create} className="bg-brand text-brand-foreground hover:bg-brand/90">
-            <Plus /> New lorebook
-          </Button>
+          <>
+            <Button size="sm" variant="outline" onClick={() => setJanitorOpen(true)}>
+              <Link2 /> From JanitorAI
+            </Button>
+            <Button size="sm" onClick={create} className="bg-brand text-brand-foreground hover:bg-brand/90">
+              <Plus /> New lorebook
+            </Button>
+          </>
         }
       />
+      <JanitorSetupDialog open={janitorOpen} onOpenChange={setJanitorOpen} />
       {books && !books.length ? (
         <EmptyState
           icon={BookOpen}

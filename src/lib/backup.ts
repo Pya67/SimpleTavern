@@ -43,7 +43,7 @@ export async function createBackup() {
   try {
     for (const f of await readdir(dir)) uploads[f] = (await readFile(path.join(dir, f))).toString("base64");
   } catch {}
-  return { format: "sussy-tavern-backup", version: 1, createdAt: new Date().toISOString(), tables, uploads };
+  return { format: "simple-tavern-backup", version: 1, createdAt: new Date().toISOString(), tables, uploads };
 }
 
 function revive(row: any) {
@@ -53,7 +53,7 @@ function revive(row: any) {
 }
 
 export async function restoreBackup(data: any) {
-  if (data?.format !== "sussy-tavern-backup") throw new Error("Not a Sussy Tavern backup file");
+  if (data?.format !== "simple-tavern-backup" && data?.format !== "sussy-tavern-backup") throw new Error("Not a SimpleTavern backup file");
   const keyRow = await db.select({ k: t.settings.openrouterKeyEnc }).from(t.settings);
   await db.transaction(async (tx) => {
     for (const [, table] of [...TABLES].reverse()) await tx.delete(table as any);

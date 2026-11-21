@@ -1,5 +1,6 @@
 import { applyMacros, type MacroContext } from "@/lib/prompt/macros";
 import { scanLore, type FiredLore, type LoreBookInput, type LoreEntryInput } from "@/lib/prompt/lore";
+import { DEFAULT_LORE_WRAPPER } from "@/lib/defaults";
 import type { PromptBlock, PromptBreakdown, TokenBreakdownItem } from "@/lib/types";
 
 export type ChatRole = "system" | "user" | "assistant";
@@ -36,6 +37,8 @@ export interface BuildInput {
   lore?: { books: LoreBookInput[]; entries: LoreEntryInput[] };
   authorsNote?: string;
   authorsNoteDepth?: number;
+  /** Emotion engine state text (injected just before the latest message). */
+  emotion?: string;
   contextSize: number;
   maxTokens: number;
   /** Ask for replies of about this many words. */
@@ -58,7 +61,14 @@ export interface BuildResult {
 }
 
 const IMPERSONATE_INSTRUCTION =
-  "[Write {{user}}'s next message, in {{user}}'s voice and from {{user}}'s perspective, matching their established style. Output only {{user}}'s message — do not write for {{char}}.]";
+  "[Special task for this one message only: instead of writing as {{char}}, write {{user}}'s next message, in {{user}}'s voice and from {{user}}'s perspective, matching the human's established style, length and formatting for {{user}}. Output only {{user}}'s message. Do not write anything for {{char}}.]";
+
+/** A character override replaces the template text; `{{original}}` inside it inserts the template text. */
+function override(own: string | undefined, original: string | undefined) {
+  const o = own?.trim() ? own : "";
+  if (!o) return original ?? "";
+  return o.replace(/\{\{\s*original\s*\}\}/gi, () => original ?? "");
+}
 
 export function buildPrompt(input: BuildInput): BuildResult {
   const ct = input.countTokens;
@@ -90,11 +100,15 @@ export function buildPrompt(input: BuildInput): BuildResult {
       })
     : [];
 
-  const loreText = (pos: FiredLore["entry"]["position"]) =>
-    firedLore
+  const loreText = (block: PromptBlock, pos: FiredLore["entry"]["position"]) => {
+    const text = firedLore
       .filter((f) => f.entry.position === pos)
       .map((f) => m(f.entry.content))
       .join("\n\n");
+    if (!text) return "";
+    const tpl = block.content?.includes("{{content}}") ? block.content : DEFAULT_LORE_WRAPPER;
+    return m(tpl).replace("{{content}}", () => text);
+  };
 
   const wrap = (block: PromptBlock, content: string) => {
     if (!content.trim()) return "";
@@ -114,7 +128,7 @@ export function buildPrompt(input: BuildInput): BuildResult {
     let content = "";
     switch (block.kind) {
       case "main":
-        content = m(input.character.systemPrompt?.trim() ? input.character.systemPrompt : (block.content ?? ""));
+        content = m(override(input.character.systemPrompt, block.content));
         break;
       case "char_description":
         content = wrap(block, input.character.description);
@@ -132,10 +146,10 @@ export function buildPrompt(input: BuildInput): BuildResult {
         content = wrap(block, input.character.exampleDialogue);
         break;
       case "lore_before":
-        content = loreText("before_char");
+        content = loreText(block, "before_char");
         break;
       case "lore_after":
-        content = loreText("after_char");
+        content = loreText(block, "after_char");
         break;
       case "memory":
         content = wrap(block, input.memory.map((c) => c.content.trim()).filter(Boolean).join("\n\n"));
@@ -144,7 +158,9 @@ export function buildPrompt(input: BuildInput): BuildResult {
         content = wrap(block, input.facts.filter((f) => f.trim()).map((f) => `- ${f.trim()}`).join("\n"));
         break;
       case "post_history":
-        content = m(input.character.postHistoryInstructions?.trim() ? input.character.postHistoryInstructions : (block.content ?? ""));
+        // Post-history steers {{char}}'s reply; it would contradict the impersonate instruction.
+        if (input.mode === "impersonate") continue;
+        content = m(override(input.character.postHistoryInstructions, block.content));
         break;
       case "custom":
         content = m(block.content ?? "");
@@ -174,6 +190,9 @@ export function buildPrompt(input: BuildInput): BuildResult {
   if (impersonate) injectedCost += ct(impersonate) + 4;
   const lengthNote = input.targetWords && input.targetWords > 0 && input.mode === "reply" ? `[Length: write about ${Math.round(input.targetWords)} words in this reply.]` : "";
   if (lengthNote) injectedCost += ct(lengthNote) + 4;
+  // The emotion note steers {{char}}; skip it when writing {{user}}'s message.
+  const emotionNote = input.emotion?.trim() && input.mode !== "impersonate" ? m(input.emotion) : "";
+  if (emotionNote) injectedCost += ct(emotionNote) + 4;
 
   const historyBudget = Math.max(0, budget - fixed - injectedCost);
 
@@ -208,10 +227,14 @@ export function buildPrompt(input: BuildInput): BuildResult {
   };
   for (const f of depthLore) inject(f.entry.depth, { role: "system", content: m(f.entry.content) });
   if (authorsNote) inject(input.authorsNoteDepth ?? 4, { role: "system", content: `[Author's note: ${authorsNote}]` });
+  // Depth 1: right before the message {{char}} is answering, so that message stays last.
+  // (Before the length note, which then lands after it at depth 0.)
+  if (emotionNote) inject(1, { role: "system", content: emotionNote });
   if (lengthNote) inject(0, { role: "system", content: lengthNote });
 
   items.push({ label: `Chat history (${kept.length} msgs)`, kind: "history", tokens: used });
   if (authorsNote) items.push({ label: "Author's note", kind: "authors_note", tokens: ct(authorsNote) + 8 });
+  if (emotionNote) items.push({ label: "Emotion state", kind: "emotion", tokens: ct(emotionNote) + 4 });
   if (lengthNote) items.push({ label: "Target length", kind: "length", tokens: ct(lengthNote) + 4 });
   if (depthLore.length) items.push({ label: "Lore (at depth)", kind: "lore_depth", tokens: depthLore.reduce((a, f) => a + ct(f.entry.content) + 4, 0) });
 

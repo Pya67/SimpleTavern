@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, Reorder, useDragControls } from "motion/react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { ArrowLeft, BookOpen, Download, GripVertical, Loader2, MessageSquarePlus, Plus, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Download, GripVertical, Loader2, MessageSquarePlus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -177,13 +177,14 @@ export function CharacterEditor({ id }: { id?: string }) {
             <div className="flex items-center gap-5">
               <AvatarUploader name={form.name} value={form.avatar ?? null} color={form.color} onChange={(v) => set("avatar", v)} />
               <div className="min-w-0 flex-1 space-y-3">
-                <TextField {...writingField("name", "Name")} placeholder="e.g. Mira" />
-                <TextField {...writingField("tagline", "Tagline")} placeholder="One line shown in lists" />
+                {/* Short fields: quicker to type than to generate, so no writing assistant. */}
+                <TextField label="Name" value={form.name} onChange={(v) => set("name", v)} placeholder="e.g. Mira" />
+                <TextField label="Tagline" value={form.tagline ?? ""} onChange={(v) => set("tagline", v)} placeholder="One line shown in lists" />
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <div className="min-w-60 flex-1">
-                <FieldLabel label="Tags" right={writingAction("tags", "Tags", writingContext.tags, (draft) => set("tags", draft.split(", ")))} />
+                <FieldLabel label="Tags" />
                 <TagInput label="Tags" value={form.tags} onChange={(t) => set("tags", t)} suggestions={tagSuggestions} placeholder="Add tags like fantasy or slice of life" />
               </div>
             </div>
@@ -252,8 +253,8 @@ export function CharacterEditor({ id }: { id?: string }) {
                 />
               </TabsContent>
               <TabsContent value="advanced" className="space-y-5 pt-4">
-                <TextField {...writingField("systemPrompt", "System prompt override")} hint="Replaces the main prompt of the template for this character. Leave empty to use the template." multiline rows={4} />
-                <TextField {...writingField("postHistoryInstructions", "Post-history instructions")} hint="Sent after the chat history (also called jailbreak / UJB). Strong steering." multiline rows={3} />
+                <TextField {...writingField("systemPrompt", "System prompt override")} hint="Replaces the main prompt of the template for this character. Write {{original}} to include the template's main prompt. Leave empty to use the template." multiline rows={4} />
+                <TextField {...writingField("postHistoryInstructions", "Post-history instructions")} hint="Sent after the chat history (also called jailbreak / UJB). Strong steering. Replaces the template's version; write {{original}} to include it." multiline rows={3} />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <FieldLabel label="Default preset" />
@@ -290,6 +291,7 @@ export function CharacterEditor({ id }: { id?: string }) {
                 </div>
                 <div>
                   <FieldLabel label="Lorebooks" hint="Linked lorebooks are active in every chat with this character." />
+                  <p className="-mt-1 mb-2 text-xs text-muted-foreground">({form.lorebookIds.length} selected)</p>
                   <div className="flex flex-wrap gap-1.5">
                     {books?.map((b) => {
                       const on = form.lorebookIds.includes(b.id);
@@ -299,7 +301,7 @@ export function CharacterEditor({ id }: { id?: string }) {
                           onClick={() => set("lorebookIds", on ? form.lorebookIds.filter((x) => x !== b.id) : [...form.lorebookIds, b.id])}
                           className={cn("flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors", on ? "bg-brand/15 font-medium" : "surface-well text-muted-foreground hover:text-foreground")}
                         >
-                          <BookOpen className="size-3" /> {b.name}
+                          {on ? <Check className="size-3" /> : <BookOpen className="size-3" />} {b.name}
                         </button>
                       );
                     })}

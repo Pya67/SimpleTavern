@@ -7,14 +7,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { Copy, Download, FileJson, MessageSquarePlus, MoreHorizontal, Pencil, Plus, Search, Star, Trash2, Upload, Users } from "lucide-react";
+import { Copy, Download, FileJson, Link2, MessageSquarePlus, MoreHorizontal, Pencil, Plus, Search, Star, Trash2, Upload, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/app/page-header";
 import { EntityAvatar } from "@/components/common/avatar";
 import { EmptyState } from "@/components/common/empty-state";
 import { confirmDialog } from "@/components/common/confirm";
+import { JanitorSetupDialog, postJanitorImport, useJanitorHandoff } from "@/components/common/janitor-import";
 import { qk, useCharacters, type CharacterListItem } from "@/lib/client/queries";
 import { rpc } from "@/lib/client/rpc";
 import { relativeTime } from "@/lib/format";
@@ -32,14 +34,16 @@ export function CharactersView() {
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [urlOpen, setUrlOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const router = useRouter();
   const params = useSearchParams();
 
   useEffect(() => {
-    if (params.get("import")) setTimeout(() => fileRef.current?.click(), 300);
+    if (params.get("import") === "1") setTimeout(() => fileRef.current?.click(), 300);
   }, [params]);
+  useJanitorCharacterImport();
 
   const doImport = async (files: File[]) => {
     if (!files.length) return;
@@ -86,9 +90,19 @@ export function CharactersView() {
         description={data ? `${data.length} character${data.length === 1 ? "" : "s"}` : undefined}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-              <Upload /> <span className="hidden sm:inline">Import</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" aria-label="Import" />}>
+                <Upload /> <span className="hidden sm:inline">Import</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent appearance="grain" align="end" sideOffset={6} className="w-56">
+                <DropdownMenuItem onClick={() => fileRef.current?.click()}>
+                  <FileJson /> Card files (PNG / JSON)…
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUrlOpen(true)}>
+                  <Link2 /> From JanitorAI…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" className="bg-brand text-brand-foreground hover:bg-brand/90" render={<Link href="/characters/new" />}>
               <Plus /> <span className="hidden sm:inline">Create</span>
             </Button>
@@ -99,7 +113,8 @@ export function CharactersView() {
 
       <div className="mx-auto max-w-6xl px-4 py-5 md:px-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative max-w-sm flex-1">
+          {/* Fixed width so a long tag list beside it can't squeeze the box away. */}
+          <div className="relative w-full shrink-0 sm:w-72">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search characters…" value={q} onChange={(e) => setQ(e.target.value)} className="h-9 pl-8" />
           </div>
@@ -135,6 +150,9 @@ export function CharactersView() {
                 <Button variant="outline" onClick={() => fileRef.current?.click()}>
                   <Upload /> Import cards
                 </Button>
+                <Button variant="outline" onClick={() => setUrlOpen(true)}>
+                  <Link2 /> From JanitorAI
+                </Button>
                 <Button render={<Link href="/characters/new" />}>
                   <Plus /> Create character
                 </Button>
@@ -151,6 +169,8 @@ export function CharactersView() {
         </motion.div>
       </div>
 
+      <JanitorSetupDialog open={urlOpen} onOpenChange={setUrlOpen} />
+
       <AnimatePresence>
         {dragging && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
@@ -164,6 +184,45 @@ export function CharactersView() {
       </AnimatePresence>
     </div>
   );
+}
+
+type JanitorCharacterResult = { id: string; name: string; definitionHidden: boolean; avatar: boolean; lorebooks: string[]; skippedLorebooks: { title: string; reason: string }[] };
+
+/** Imports a character the userscript sent from JanitorAI, along with its lorebooks. */
+function useJanitorCharacterImport() {
+  const qc = useQueryClient();
+  const router = useRouter();
+  useJanitorHandoff("/characters", "character", async (data) => {
+    const name = String(data.chat_name || data.name || "this character").slice(0, 80);
+    const books = Array.isArray(data.lorebooks) ? data.lorebooks.length : 0;
+    const ok = await confirmDialog({
+      title: `Import ${name}?`,
+      description: `Sent from JanitorAI by the Send to SimpleTavern userscript.${books ? ` Comes with ${books} lorebook${books === 1 ? "" : "s"}, which will be linked to the character.` : ""}`,
+      confirmLabel: "Import",
+    });
+    if (!ok) return;
+    const t = toast.loading(`Importing ${name}…`);
+    const r = await postJanitorImport<JanitorCharacterResult>("/api/characters/import-janitor", data);
+    toast.dismiss(t);
+    if (!r.ok) return void toast.error(r.error);
+    qc.invalidateQueries({ queryKey: qk.characters });
+    qc.invalidateQueries({ queryKey: qk.lorebooks });
+    const open = { label: "Open", onClick: () => router.push(`/characters/${r.id}`) };
+    const linked = r.lorebooks.length ? `Linked lorebook${r.lorebooks.length === 1 ? "" : "s"}: ${r.lorebooks.join(", ")}.` : "";
+    if (r.definitionHidden)
+      toast.warning(`Imported ${r.name} without its definition`, {
+        description: [
+          "The creator hid the definition on JanitorAI, so only the name, picture, tags and bio came across. Fill in the description and first message yourself.",
+          linked,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        duration: 12_000,
+        action: open,
+      });
+    else toast.success(`Imported ${r.name}`, { description: linked || undefined, action: open });
+    for (const b of r.skippedLorebooks) toast.warning(`Lorebook “${b.title}” wasn't imported`, { description: b.reason, duration: 10_000 });
+  });
 }
 
 function CharacterCard({ c, i }: { c: CharacterListItem; i: number }) {

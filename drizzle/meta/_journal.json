@@ -22,6 +22,27 @@
       "when": 1795223726614,
       "tag": "0002_directories",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795273422920,
+      "tag": "0003_lorebook_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795273667189,
+      "tag": "0004_emotion_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795274164659,
+      "tag": "0005_emotion_default_on",
+      "breakpoints": true
     }
   ]
 }

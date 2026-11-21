@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Drawer } from "vaul";
@@ -10,7 +10,8 @@ import { SidebarContent } from "@/components/app/sidebar";
 import { CommandPalette } from "@/components/app/command-palette";
 import { NewChatDialog } from "@/components/app/new-chat-dialog";
 import { HelpDialog } from "@/components/app/help-dialog";
-import { ConfirmHost } from "@/components/common/confirm";
+import { ConfirmHost, useConfirmOpen } from "@/components/common/confirm";
+import { PortalContainerContext } from "@/components/ui/portal-container";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useIsMobile } from "@/hooks/use-media";
 import { useOnline } from "@/hooks/use-online";
@@ -31,6 +32,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const online = useOnline();
 
   useEffect(() => set({ mobileNavOpen: false }), [pathname, set]);
+  // The drawer is modal and locks pointer events outside itself, so a dialog shown over it
+  // (opened from a sidebar action) would be unclickable. Dialogs take over from the drawer.
+  const appDialogOpen = useUi((s) => s.newChatOpen || s.paletteOpen || s.helpOpen);
+  const confirmOpen = useConfirmOpen();
+  const dialogOpen = appDialogOpen || confirmOpen;
+  useEffect(() => {
+    if (dialogOpen) set({ mobileNavOpen: false });
+  }, [dialogOpen, set]);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   // Keep the accent palette in sync with saved settings (the boot script covers first paint).
   const ui = useSettings().data?.ui;
@@ -57,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-background">
+    <div className="flex h-dvh w-full overflow-hidden bg-background standalone:bg-black standalone:pt-[env(safe-area-inset-top)] standalone:pb-[env(safe-area-inset-bottom)]">
       {!isMobile && (
         <motion.aside
           initial={false}
@@ -75,16 +85,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Drawer.Root direction="left" open={mobileNavOpen} onOpenChange={(o) => set({ mobileNavOpen: o })}>
           <Drawer.Portal>
             <Drawer.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
-            <Drawer.Content className="fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[320px] bg-sidebar shadow-2xl outline-none" aria-describedby={undefined}>
+            <Drawer.Content ref={drawerRef} className="fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[320px] bg-sidebar shadow-2xl outline-none standalone:before:absolute standalone:before:inset-x-0 standalone:before:top-0 standalone:before:z-10 standalone:before:h-[env(safe-area-inset-top)] standalone:before:bg-black" aria-describedby={undefined}>
               <Drawer.Title className="sr-only">Navigation</Drawer.Title>
               <div className="h-full pt-[env(safe-area-inset-top)]">
-                <SidebarContent onNavigate={() => set({ mobileNavOpen: false })} />
+                {/* Menus opened in the drawer render inside it, where taps are allowed. */}
+                <PortalContainerContext.Provider value={drawerRef}>
+                  <SidebarContent onNavigate={() => set({ mobileNavOpen: false })} />
+                </PortalContainerContext.Provider>
               </div>
             </Drawer.Content>
           </Drawer.Portal>
         </Drawer.Root>
       )}
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-background">
         <AnimatePresence>
           {!online && (
             <motion.div

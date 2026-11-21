@@ -16,11 +16,12 @@ import {
   Download,
   FastForward,
   GitBranch,
+  HeartPulse,
   Info,
   Layers,
   Loader2,
   MoreVertical,
-  PanelRight,
+  Settings,
   RefreshCw,
   ScanSearch,
   SlidersHorizontal,
@@ -44,9 +45,11 @@ import { Conversation, ConversationSkeleton } from "@/components/chat/conversati
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import type { MessageCtx } from "@/components/chat/message-item";
 import { generate, jumpToMessage, loadChat, selectSibling, setOnChatChanged, stop, useChat } from "@/components/chat/chat-store";
+import { latestEmotion } from "@/lib/emotion/engine";
 import { GenerationPanel } from "@/components/panels/generation-panel";
 import { MemoryPanel, useMemory } from "@/components/panels/memory-panel";
 import { InspectorPanel } from "@/components/panels/inspector-panel";
+import { EmotionPanel } from "@/components/panels/emotion-panel";
 import { CharacterPanel, LorePanel, PersonaPanel } from "@/components/panels/simple-panels";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useIsMobile } from "@/hooks/use-media";
@@ -58,10 +61,11 @@ import { useCommands } from "@/stores/commands";
 const TABS = [
   { id: "character", label: "Character", icon: Users },
   { id: "persona", label: "Persona", icon: UserRound },
-  { id: "generation", label: "Generation", icon: SlidersHorizontal },
+  { id: "generation", label: "LLM", icon: SlidersHorizontal },
   { id: "memory", label: "Memory", icon: Layers },
+  { id: "emotion", label: "Emotion", icon: HeartPulse },
   { id: "lore", label: "Lore", icon: BookOpen },
-  { id: "inspector", label: "Inspector", icon: ScanSearch },
+  { id: "inspector", label: "Context", icon: ScanSearch },
 ] as const;
 
 const WIDTHS = { narrow: "680px", normal: "820px", wide: "1040px" } as const;
@@ -91,6 +95,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [noteOpen, setNoteOpen] = useState(false);
 
   const chat = info.data?.chat;
+  const mood = useChat((s) => (chat?.emotionEnabled ? latestEmotion(s.messages) : null));
   const character = info.data?.character;
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const personaId = info.data?.effectivePersonaId ?? personas?.[0]?.id ?? null;
@@ -287,6 +292,7 @@ export function ChatView({ chatId }: { chatId: string }) {
       { id: "persona", group: "This chat", label: "Switch persona", icon: UserRound, shortcut: "Alt P", run: () => openPanel("persona") },
       { id: "model", group: "This chat", label: "Change model / preset", icon: SlidersHorizontal, run: () => openPanel("generation") },
       { id: "memory", group: "This chat", label: "Open memory", icon: Layers, run: () => openPanel("memory") },
+      { id: "emotion", group: "This chat", label: "Open emotion engine", icon: HeartPulse, run: () => openPanel("emotion") },
       { id: "compact", group: "This chat", label: "Compact memory now", icon: Brain, run: () => onSlash("compact", "") },
       { id: "inspect", group: "This chat", label: "Inspect next prompt", icon: ScanSearch, run: () => onSlash("inspect", "") },
       { id: "export-md", group: "This chat", label: "Export chat as Markdown", icon: Download, run: () => exportChat("md") },
@@ -328,10 +334,12 @@ export function ChatView({ chatId }: { chatId: string }) {
             },
             onFork: fork,
             onPinFact: (m) => setFactDraft({ text: m.content.slice(0, 280), sourceId: m.id }),
+            emotionEnabled: !!chat?.emotionEnabled,
+            onOpenEmotion: () => openPanel("emotion"),
           }
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [character, personaMap, personaId, ui],
+    [character, personaMap, personaId, ui, chat?.emotionEnabled],
   );
 
   if (info.error) {
@@ -349,13 +357,14 @@ export function ChatView({ chatId }: { chatId: string }) {
       {panelTab === "persona" && personas && <PersonaPanel personas={personas} currentId={personaId} onSelect={setPersona} />}
       {panelTab === "generation" && <GenerationPanel info={info.data} />}
       {panelTab === "memory" && <MemoryPanel chatId={chatId} />}
+      {panelTab === "emotion" && <EmotionPanel info={info.data} />}
       {panelTab === "lore" && <LorePanel info={info.data} />}
       {panelTab === "inspector" && <InspectorPanel chatId={chatId} messageId={inspectId} personaId={personaId} onClear={() => setInspectId(null)} />}
     </div>
   );
 
   const tabs = (
-    <div className="grid grid-cols-6 gap-0.5 px-2 pb-1 pt-2">
+    <div className="grid grid-cols-7 gap-0.5 px-2 pb-1 pt-2">
       {TABS.map((t) => (
         <button
           key={t.id}
@@ -379,13 +388,24 @@ export function ChatView({ chatId }: { chatId: string }) {
       ref={rootRef}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur-md md:px-4">
+        {/* A size container: with both sidebars open the header can be narrow even on a wide screen,
+            so its extras respond to the header's own width rather than the viewport's. */}
+        <header className="@container z-20 flex h-14 shrink-0 items-center gap-2 overflow-hidden border-b bg-background/80 px-3 backdrop-blur-md md:px-4">
           <SidebarToggle />
           {character ? (
             <button onClick={() => openPanel("character")} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-accent">
-              <EntityAvatar name={character.name} src={character.avatar} color={character.color} size={32} />
+              <span className="shrink-0">
+                <EntityAvatar name={character.name} src={character.avatar} color={character.color} size={32} />
+              </span>
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold leading-tight">{character.name}</div>
+                <div className="flex items-center gap-1.5 text-sm font-semibold leading-tight">
+                  <span className="truncate">{character.name}</span>
+                  {mood && (
+                    <span className="shrink-0 whitespace-nowrap text-xs font-normal text-muted-foreground" title={`Mood: ${mood.label}`}>
+                      {mood.kaomoji}
+                    </span>
+                  )}
+                </div>
                 <div className="truncate text-xs text-muted-foreground">{chat?.title}</div>
               </div>
             </button>
@@ -400,7 +420,7 @@ export function ChatView({ chatId }: { chatId: string }) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 onClick={() => openPanel("memory")}
-                className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground sm:flex"
+                className="hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs text-muted-foreground @2xl:flex"
               >
                 <Loader2 className="size-3 animate-spin text-brand" /> Updating memory
               </motion.button>
@@ -411,14 +431,14 @@ export function ChatView({ chatId }: { chatId: string }) {
           )}
           <Tooltip>
             <TooltipTrigger
-              render={<Button variant="ghost" size="icon-sm" onClick={() => setUi({ helpOpen: true, helpTab: "features" })} aria-label="Features and quick actions" className="text-foreground" />}
+              render={<Button variant="ghost" size="icon-sm" onClick={() => setUi({ helpOpen: true, helpTab: "features" })} aria-label="Features and quick actions" className="text-foreground @max-xs:hidden" />}
             >
               <Info />
             </TooltipTrigger>
             <TooltipContent>Features &amp; quick actions</TooltipContent>
           </Tooltip>
           {generating && (
-            <Button variant="outline" size="sm" onClick={stop} className="gap-1.5">
+            <Button variant="outline" size="sm" onClick={stop} className="gap-1.5 max-md:hidden">
               <Square className="size-3 fill-current" /> Stop
             </Button>
           )}
@@ -431,7 +451,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           <BookmarksDialog chatId={chatId} character={character} personas={personas} open={bookmarksOpen} onOpenChange={setBookmarksOpen} />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={() => setPanelOpen(!panelOpen)} aria-label="Toggle panel" className={cn(panelOpen && "bg-accent")} />}>
-              <PanelRight />
+              <Settings />
             </TooltipTrigger>
             <TooltipContent>Context panel · Alt+I</TooltipContent>
           </Tooltip>

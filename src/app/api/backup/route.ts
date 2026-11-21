@@ -9,7 +9,7 @@ export async function GET() {
   return new Response(JSON.stringify(b), {
     headers: {
       "content-type": "application/json",
-      "content-disposition": `attachment; filename="sussy-tavern-backup-${new Date().toISOString().slice(0, 10)}.json"`,
+      "content-disposition": `attachment; filename="simple-tavern-backup-${new Date().toISOString().slice(0, 10)}.json"`,
     },
   });
 }

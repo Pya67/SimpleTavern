@@ -33,7 +33,8 @@ describe("buildPrompt", () => {
     const r = buildPrompt(base());
     expect(r.messages[0].role).toBe("system");
     expect(r.messages[0].content).toContain("You are Mira");
-    expect(r.messages[0].content).toContain("About Traveler: A wanderer.");
+    expect(r.messages[0].content).toContain('<user_persona name="Traveler">');
+    expect(r.messages[0].content).toContain("A wanderer.");
     expect(r.messages.filter((m) => m.role !== "system").map((m) => m.content)).toEqual(["Hello there.", "Hi!", "Welcome."]);
   });
 
@@ -71,5 +72,22 @@ describe("buildPrompt", () => {
   it("impersonate adds an instruction for the user", () => {
     const r = buildPrompt(base({ mode: "impersonate" }));
     expect(r.messages[r.messages.length - 1].content).toContain("Traveler's next message");
+    // The post-history reminder (write as {{char}}) must not contradict the impersonate task.
+    expect(r.messages.some((m) => m.content.includes("Write Mira's next reply"))).toBe(false);
+  });
+
+  it("ends a normal reply with the post-history reminder", () => {
+    const r = buildPrompt(base());
+    const last = r.messages[r.messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("Write Mira's next reply to Traveler's last message");
+  });
+
+  it("character overrides can include the template text with {{original}}", () => {
+    const r = buildPrompt(base({ character: { ...base().character, systemPrompt: "{{original}}\n\nExtra: {{char}} lisps.", postHistoryInstructions: "Short replies." } }));
+    expect(r.messages[0].content).toContain("You are Mira.");
+    expect(r.messages[0].content).toContain("Extra: Mira lisps.");
+    const last = r.messages[r.messages.length - 1];
+    expect(last.content).toBe("Short replies.");
   });
 });

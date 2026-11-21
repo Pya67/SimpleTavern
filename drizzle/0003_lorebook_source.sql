@@ -1,0 +1,1 @@
+ALTER TABLE "lorebooks" ADD COLUMN "source" text DEFAULT '' NOT NULL;

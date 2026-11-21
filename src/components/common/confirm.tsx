@@ -24,6 +24,9 @@ export function confirmDialog(opts: ConfirmOpts) {
   return new Promise<boolean>((resolve) => useConfirmStore.setState({ opts, resolve }));
 }
 
+/** Whether a confirm dialog is showing. */
+export const useConfirmOpen = () => useConfirmStore((s) => !!s.opts);
+
 export function ConfirmHost() {
   const { opts, resolve } = useConfirmStore();
   const close = (v: boolean) => {

@@ -1,4 +1,4 @@
-# Sussy Tavern
+# SimpleTavern
 
 A private, single-user roleplay app for chatting with characters through any LLM on [OpenRouter](https://openrouter.ai). It's built for UX: smooth word-by-word streaming, spring animations, swipes and branches, mid-chat persona switching, and auto-compacting memory, so chats can go on indefinitely.
 

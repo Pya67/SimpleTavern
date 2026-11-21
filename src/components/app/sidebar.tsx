@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { KAOMOJIS } from "@/lib/kaomoji";
+import { LogoMark } from "@/components/app/logo";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UNDO_DURATION, undoAction } from "@/lib/client/toast-actions";
@@ -70,8 +71,18 @@ const directorySensors = [
   KeyboardSensor.configure({ preventActivation: (event) => event.code !== "Space" || !event.shiftKey }),
 ];
 
-/** The sidebar title: a kaomoji that changes every few seconds with a blur fade. */
-function KaomojiTitle() {
+const APP_NAME = "SimpleTavern";
+const letterPop = {
+  hidden: { opacity: 0, y: 7, scale: 0.4, rotate: -8 },
+  shown: { opacity: 1, y: 0, scale: 1, rotate: 0 },
+};
+
+/**
+ * The sidebar title: a kaomoji that changes every few seconds with a blur fade.
+ * While `showName` is set (the home link is hovered or focused), it spells out the app name,
+ * each letter popping in a beat after the last.
+ */
+function KaomojiTitle({ showName }: { showName: boolean }) {
   // Start on a fixed face so the server and client render the same thing; shuffle after mount.
   const [index, setIndex] = useState(0);
   const reduce = useReducedMotion();
@@ -88,16 +99,40 @@ function KaomojiTitle() {
   return (
     <span aria-hidden className="relative block min-w-0 flex-1 truncate">
       <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span
-          key={k}
-          className="block truncate whitespace-nowrap"
-          initial={reduce ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)" }}
-          animate={reduce ? { opacity: 1 } : { opacity: 1, filter: "blur(0px)" }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)" }}
-          transition={{ duration: reduce ? 0.15 : 0.6, ease: [0.16, 1, 0.3, 1] }}
-        >
-          {k}
-        </motion.span>
+        {showName ? (
+          <motion.span
+            key="name"
+            className="block truncate whitespace-nowrap"
+            initial={reduce ? { opacity: 0 } : "hidden"}
+            animate={reduce ? { opacity: 1 } : "shown"}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, filter: "blur(6px)", transition: { duration: 0.2, ease: "easeOut" } }}
+            transition={reduce ? { duration: 0.15 } : { staggerChildren: 0.035 }}
+          >
+            {reduce
+              ? APP_NAME
+              : [...APP_NAME].map((ch, i) => (
+                  <motion.span
+                    key={i}
+                    className="inline-block origin-bottom"
+                    variants={letterPop}
+                    transition={{ type: "spring", stiffness: 520, damping: 17, mass: 0.6 }}
+                  >
+                    {ch}
+                  </motion.span>
+                ))}
+          </motion.span>
+        ) : (
+          <motion.span
+            key={k}
+            className="block truncate whitespace-nowrap"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)" }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, filter: "blur(0px)" }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)" }}
+            transition={{ duration: reduce ? 0.15 : 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {k}
+          </motion.span>
+        )}
       </AnimatePresence>
     </span>
   );
@@ -153,6 +188,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const set = useUi((s) => s.set);
   // `null`: not creating. Otherwise an inline name field is shown; `chatId` is moved in once created.
   const [creating, setCreating] = useState<{ chatId?: string } | null>(null);
+  const [titleHover, setTitleHover] = useState(false);
   const { createDirectory, moveChat } = useDirectoryActions();
 
   const dirIds = new Set(directories.map((d) => d.id));
@@ -172,10 +208,15 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href="/"
           onClick={onNavigate}
-          aria-label="Sussy Tavern, home"
-          className="flex h-8 min-w-0 flex-1 items-center overflow-hidden rounded-lg px-2 text-[15px] font-semibold transition-colors hover:bg-sidebar-accent"
+          onPointerEnter={(e) => e.pointerType === "mouse" && setTitleHover(true)}
+          onPointerLeave={() => setTitleHover(false)}
+          onFocus={(e) => e.currentTarget.matches(":focus-visible") && setTitleHover(true)}
+          onBlur={() => setTitleHover(false)}
+          aria-label="SimpleTavern, home"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-lg px-1.5 text-[15px] font-semibold transition-colors hover:bg-sidebar-accent"
         >
-          <KaomojiTitle />
+          <LogoMark className="size-6 rounded-[7px]" />
+          <KaomojiTitle showName={titleHover} />
         </Link>
         <Tooltip>
           <TooltipTrigger render={<Button variant="ghost" size="icon-sm" className="hidden md:inline-flex" onClick={() => set({ sidebarOpen: false })} aria-label="Collapse sidebar" />}>

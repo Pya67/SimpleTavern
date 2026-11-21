@@ -7,11 +7,17 @@ import { fontVariables } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Sussy Tavern", template: "%s · Sussy Tavern" },
+  title: { default: "SimpleTavern", template: "%s · SimpleTavern" },
   description: "Your private roleplay tavern.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Sussy Tavern", statusBarStyle: "black-translucent" },
-  icons: { icon: "/icons/favicon-48.png", apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "SimpleTavern", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: [
+      { url: "/icons/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/favicon-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -20,6 +26,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
   themeColor: [
+    // First match wins: the installed app always gets black system bars.
+    { media: "(display-mode: standalone)", color: "#000000" },
     { media: "(prefers-color-scheme: dark)", color: "#1c1916" },
     { media: "(prefers-color-scheme: light)", color: "#fbf8f3" },
   ],

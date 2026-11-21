@@ -219,7 +219,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ch
   };
 
   return (
-    <div className="relative mx-auto w-full max-w-(--chat-width) px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:w-[calc(100%-4rem)] md:px-6 md:has-[textarea:focus]:w-full md:has-[textarea:focus]:max-w-[calc(var(--chat-width)+4rem)] motion-safe:md:transition-[width,max-width] motion-safe:md:duration-300 motion-safe:md:ease-out">
+    <div className="relative mx-auto w-full max-w-(--chat-width) px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] standalone:pb-3 md:w-[calc(100%-4rem)] md:px-6 md:has-[textarea:focus]:w-full md:has-[textarea:focus]:max-w-[calc(var(--chat-width)+4rem)] motion-safe:md:transition-[width,max-width] motion-safe:md:duration-300 motion-safe:md:ease-out">
       <AnimatePresence>
         {slashMatches.length > 0 && (
           <motion.div
@@ -323,7 +323,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ch
             variant="ghost"
             size="icon"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={insertBold}
+            onClick={() => {
+              keyTick();
+              insertBold();
+            }}
             aria-label="Bold"
             className="size-9 text-muted-foreground max-[360px]:size-8 md:hidden"
           >
@@ -333,18 +336,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ch
             variant="ghost"
             size="icon"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={insertItalic}
+            onClick={() => {
+              keyTick();
+              insertItalic();
+            }}
             aria-label="Italic"
             className="size-9 text-muted-foreground max-[360px]:size-8 md:hidden"
           >
             <Italic className="size-4" strokeWidth={2.5} />
           </Button>
 
-          {modelId && onModel && <ModelPicker value={modelId} onChange={onModel} variant="chip" />}
+          {/* On mobile the model + effort pair sits on the right, next to the + menu. */}
+          {modelId && onModel && <ModelPicker value={modelId} onChange={onModel} variant="chip" className="max-md:ml-auto" />}
           {modelId && <EffortMenu modelId={modelId} />}
 
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="ml-auto text-muted-foreground max-md:size-9" aria-label="More actions" />}>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon" className={cn("text-muted-foreground max-md:size-9", modelId && onModel ? "md:ml-auto" : "ml-auto")} aria-label="More actions" />}
+            >
               <Plus className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent appearance="grain" side="top" sideOffset={8} align="end" className="w-56">
@@ -400,6 +409,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ ch
     </div>
   );
 });
+
+/** A short haptic tick, like a key press on a phone keyboard (Android; iOS browsers don't support vibration). */
+function keyTick() {
+  try {
+    navigator.vibrate?.(10);
+  } catch {}
+}
 
 /** Quick per-model reasoning effort switch (only for models that can think). */
 function EffortMenu({ modelId }: { modelId: string }) {

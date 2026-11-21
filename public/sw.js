@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and shows an offline page
 // for navigations when the network is unavailable. API calls are never cached.
-const CACHE = "st-shell-v1";
+const CACHE = "st-shell-v2"; // bump when icons or the offline page change
 const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (e) => {
