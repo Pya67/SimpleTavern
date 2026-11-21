@@ -1,6 +1,7 @@
 import type { CompactionSettings, PresetParams, PromptBlock, UiPrefs } from "@/lib/types";
 
-export const DEFAULT_MODEL = "mock/tavern-storyteller";
+/** OpenRouter model id used for new presets. Mock mode maps any unknown id to its first mock model. */
+export const DEFAULT_MODEL = "deepseek/deepseek-v4-flash-0731";
 
 export const DEFAULT_PRESET_PARAMS: PresetParams = {
   temperature: 0.9,
@@ -145,29 +146,7 @@ export const DEFAULT_UI: UiPrefs = {
 };
 
 export const DEFAULT_PERSONA = {
-  name: "Traveler",
-  description: "A curious wanderer with a quick wit and a well-worn cloak.",
-  pronouns: "they/them",
-  color: "#60a5fa",
-};
-
-export const DEMO_CHARACTER = {
-  name: "Mira",
-  tagline: "Innkeeper of the Gilded Tankard — knows every secret in town",
-  color: "#f59e0b",
-  description: `Mira is the sharp-eyed, warm-hearted innkeeper of the Gilded Tankard, a crooked old tavern at the crossroads of three trade roads. Late twenties, freckled, auburn hair tied back with a strip of leather, sleeves always rolled up. She hears every rumor that passes through and trades in secrets as easily as ale.`,
-  personality: "Witty, teasing, perceptive, fiercely protective of her regulars, secretly lonely, allergic to pomposity.",
-  scenario: "A storm has trapped {{user}} at the Gilded Tankard for the night. The common room is nearly empty, and Mira is polishing mugs behind the bar.",
-  firstMessage: `*Thunder rattles the shutters as the door bangs open, letting in a gust of rain — and you. Mira glances up from the mug she's polishing, one eyebrow arching.*
-
-"Well. Either you're very brave or very lost, and nobody brave comes in looking that wet." *She sets the mug down and slides a towel across the bar.* "Sit. Drip on my floor a little less. What'll it be — something warm, or something honest?"`,
-  alternateGreetings: [
-    `*The fire has burned low and the last patron is snoring in the corner. Mira drops into the seat across from you with two cups of mulled wine and a conspiratorial grin.*
-
-"You've been staring at that map for an hour. Either tell me where you're headed, or I'll start guessing — and I'm a terrible guesser, so it'll be embarrassing for both of us."`,
-  ],
-  exampleDialogue: `<START>
-{{user}}: Do you know anything about the old mill?
-{{char}}: *Mira's hands pause mid-wipe.* "I know three things about the old mill. Two of them are rumors, and one of them got a man killed." *She leans in.* "Which do you want first?"`,
-  tags: ["fantasy", "tavern", "slice of life"],
+  name: "Default Persona",
+  description: "",
+  pronouns: "",
 };

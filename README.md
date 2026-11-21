@@ -169,39 +169,79 @@ SimpleTavern works properly on phones and can be installed like an app from your
 
 ## Getting started
 
-You'll need three things installed:
+There are two ways to run SimpleTavern on your own computer. Both need [Docker Desktop](https://www.docker.com/products/docker-desktop/), which runs the database.
 
-- [Node.js](https://nodejs.org) 22 or newer (24 recommended)
-- [pnpm](https://pnpm.io) 11
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (it runs the database)
+- **Option A, everything in Docker.** The simplest choice if you just want to use it. You don't need to install anything else.
+- **Option B, the dev server.** Pick this if you want to change the code. It also needs [Node.js](https://nodejs.org) 22 or newer (24 recommended) and [pnpm](https://pnpm.io) 11.
 
-Then, in a terminal inside this folder:
+You never have to set up the database yourself. Docker starts it, and SimpleTavern creates its tables and defaults the first time it runs.
 
-```powershell
-pnpm install
-docker compose up -d
-copy .env.example .env.local
-pnpm dev
-```
+### Option A: Everything in Docker
 
-Open **http://localhost:3000** and you're in. The first start sets everything up, including a demo character so you have someone to talk to right away.
+1. Make your settings file. In a terminal inside this folder:
+
+   ```powershell
+   copy .env.example .env
+   ```
+
+   Docker reads `.env` (not `.env.local`).
+
+2. Open `.env` and change these lines:
+
+   - `AUTH_BYPASS=true` skips the login screen. That's fine while it only runs on your own computer. Without it, and without a password (see [Logging in](#logging-in)), nobody can get in.
+   - `OPENROUTER_MOCK=false` uses real AI models. Leave it `true` to try the fake practice AI first.
+   - Set `ENCRYPTION_KEY` to a long random string (32+ characters). It protects your OpenRouter key in the database.
+
+3. Build and start it:
+
+   ```powershell
+   docker compose --profile app up -d --build
+   ```
+
+   The first build takes a few minutes. Run the same command again after you update the code.
+
+### Option B: The dev server
+
+1. In a terminal inside this folder:
+
+   ```powershell
+   pnpm install
+   docker compose up -d
+   copy .env.example .env.local
+   ```
+
+   `docker compose up -d` starts only the database. `pnpm db:up` does the same thing.
+
+2. Open `.env.local` and set `AUTH_BYPASS=true`, so you aren't stopped at a login screen.
+
+3. Start it:
+
+   ```powershell
+   pnpm dev
+   ```
+
+Already have Postgres? You can skip Docker and point `DATABASE_URL` in `.env.local` at your own database instead, as long as it has the [pgvector](https://github.com/pgvector/pgvector) extension.
+
+### First start
+
+Open **http://localhost:3000**. You'll find a "Balanced RP" preset on DeepSeek V4 Flash and an empty "Default Persona", ready for you to fill in. Add your OpenRouter key (see below), then create or import a character to start chatting.
 
 ### Connecting a real AI model
 
-Out of the box, SimpleTavern uses a **fake practice AI** so you can click around without an account or spending anything. To talk to real models:
-
 1. Make an account at [openrouter.ai](https://openrouter.ai) and create an API key.
-2. In `.env.local`, set `OPENROUTER_MOCK=false`.
+2. Make sure `OPENROUTER_MOCK=false` is set in your settings file (`.env` for Docker, `.env.local` for the dev server). The example file starts on the fake practice AI, so you can click around without an account or spending anything.
 3. In SimpleTavern, go to **Settings → Connection** and paste your key. It's stored encrypted.
 
-(You can also put the key in `.env.local` as `OPENROUTER_API_KEY` if you prefer.)
+You can also put the key in your settings file as `OPENROUTER_API_KEY` if you prefer. If the key is missing or OpenRouter rejects it, the home page tells you and links to Settings.
 
 ### Logging in
 
 SimpleTavern is a one-person app, so there's only one login: yours.
 
-- **Just trying it on your own computer?** Set `AUTH_BYPASS=true` in `.env.local` and you'll skip the login screen.
-- **Want a password?** Run `pnpm auth:hash "your password"`, paste the line it prints into `.env.local`, set `AUTH_SECRET` to a long random string, and set `AUTH_BYPASS=false`.
+- **Just using it on your own computer?** Set `AUTH_BYPASS=true` in your settings file and you'll skip the login screen.
+- **Want a password?** Run `pnpm auth:hash "your password"` (this needs Node.js and pnpm, even if you run the app in Docker). Paste the line it prints into your settings file, set `AUTH_SECRET` to a long random string, and set `AUTH_BYPASS=false`.
+
+After changing `.env`, restart Docker with the same `docker compose --profile app up -d` command. After changing `.env.local`, restart `pnpm dev`.
 
 ---
 

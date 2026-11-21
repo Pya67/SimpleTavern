@@ -15,7 +15,7 @@ import {
   promptTemplates,
   settings,
 } from "@/lib/db/schema";
-import { DEFAULT_COMPACTION, DEFAULT_PRESET_PARAMS, DEFAULT_TEMPLATE_BLOCKS, DEFAULT_PERSONA } from "@/lib/defaults";
+import { DEFAULT_COMPACTION, DEFAULT_MODEL, DEFAULT_PRESET_PARAMS, DEFAULT_TEMPLATE_BLOCKS, DEFAULT_PERSONA } from "@/lib/defaults";
 import { getModel } from "@/lib/llm/models";
 import { answerBudget } from "@/lib/llm/params";
 import { buildPrompt, type HistoryMessage } from "@/lib/prompt/builder";
@@ -49,7 +49,7 @@ export async function loadChatContext(chatId: string, personaOverride?: string |
   const personaId = personaOverride ?? chat.personaId ?? character.defaultPersonaId ?? s?.defaultPersonaId ?? allPersonas[0]?.id;
   const persona = allPersonas.find((p) => p.id === personaId) ?? allPersonas[0] ?? { id: null, ...DEFAULT_PERSONA };
 
-  const modelId = preset?.modelId ?? "mock/tavern-storyteller";
+  const modelId = preset?.modelId ?? DEFAULT_MODEL;
   const model = await getModel(modelId);
   const params = { ...DEFAULT_PRESET_PARAMS, ...(preset?.params ?? {}) };
   // A per-model reasoning effort (Settings / composer) overrides the preset.

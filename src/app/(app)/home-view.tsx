@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, BookOpen, FlaskConical, KeyRound, Loader2, MessageSquarePlus, Plus, SlidersHorizontal, Star, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 import { cn } from "cn";
@@ -123,6 +123,8 @@ function Section({ title, href, linkLabel, children }: { title: string; href?: s
 /** Only shows when something needs attention before chatting works. */
 function SetupNotice() {
   const { data: settings } = useSettings();
+  // Shares the Settings page's cache, so a saved key is checked at most once a minute.
+  const key = useQuery({ queryKey: ["credits"], queryFn: () => rpc("settings.checkKey", {}), enabled: !!settings?.hasKey && !settings.mock, staleTime: 60_000 });
   if (!settings) return null;
   if (settings.mock)
     return (
@@ -133,12 +135,21 @@ function SetupNotice() {
         </p>
       </div>
     );
-  if (settings.hasKey) return null;
+  const rejected = settings.hasKey && key.data && !key.data.ok && key.data.error === "Invalid API key";
+  if (settings.hasKey && !rejected) return null;
   return (
     <div className="surface-grain flex items-center gap-3 rounded-2xl px-4 py-3 text-sm">
       <KeyRound className="size-4 shrink-0 text-brand" />
       <p className="flex-1 text-muted-foreground">
-        <span className="font-medium text-foreground">No OpenRouter key.</span> Add one to generate replies.
+        {rejected ? (
+          <>
+            <span className="font-medium text-foreground">OpenRouter rejected your key.</span> Replace it to generate replies.
+          </>
+        ) : (
+          <>
+            <span className="font-medium text-foreground">No OpenRouter key.</span> Add one to generate replies.
+          </>
+        )}
       </p>
       <Button size="sm" variant="secondary" render={<Link href="/settings" />}>
         Settings

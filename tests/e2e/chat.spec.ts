@@ -6,14 +6,23 @@ async function rpc<T = unknown>(page: Page, name: string, body: unknown): Promis
   return (await res.json()).data as T;
 }
 
+/** Fresh installs ship with no characters, so tests create their own. */
+function createCharacter(page: Page, name: string) {
+  return rpc<{ id: string; name: string }>(page, "characters.create", {
+    name,
+    description: "{{char}} keeps the lantern at the old mill.",
+    firstMessage: `*${name} looks up from the lantern.* "Evening, {{user}}."`,
+  });
+}
+
 async function lastAssistantDone(page: Page) {
   // While streaming, a "Stop" button is shown in the header; wait for it to go away.
   await expect(page.getByRole("button", { name: "Stop" }).first()).toBeHidden({ timeout: 45_000 });
 }
 
 test("roleplay chat: send, stream, swipe, edit, persona switch, delete + undo", async ({ page }) => {
-  const characters = await rpc<{ id: string; name: string }[]>(page, "characters.list", {});
-  const character = characters[0];
+  const character = await createCharacter(page, `e2e-char-${Date.now()}`);
+  const otherPersona = await rpc<{ id: string; name: string }>(page, "personas.create", { name: `e2e-persona-${Date.now()}` });
   // Make sure this chat uses a fast mock model.
   const presets = await rpc<{ id: string }[]>(page, "presets.list", {});
   const preset = await rpc<{ id: string }>(page, "presets.create", { name: `e2e-${Date.now()}`, modelId: "mock/tavern-flash", params: { maxTokens: 300 } });
@@ -49,13 +58,11 @@ test("roleplay chat: send, stream, swipe, edit, persona switch, delete + undo", 
   await expect(page.getByText("Hello! Tell me about the lantern instead.")).toBeVisible();
 
   // Switch persona mid-chat and send as the other persona.
-  const personas = await rpc<{ id: string; name: string }[]>(page, "personas.list", {});
-  test.skip(personas.length < 2, "needs two personas");
   await page.getByRole("button", { name: "Switch persona" }).click();
-  await page.getByRole("button", { name: new RegExp(personas[1].name) }).first().click();
+  await page.getByRole("button", { name: new RegExp(otherPersona.name) }).first().click();
   await composer.fill("A second voice joins the conversation.");
   await composer.press("Enter");
-  await expect(page.locator("[data-message-id]").filter({ hasText: "A second voice joins" }).getByText(personas[1].name)).toBeVisible();
+  await expect(page.locator("[data-message-id]").filter({ hasText: "A second voice joins" }).getByText(otherPersona.name)).toBeVisible();
   await lastAssistantDone(page);
 
   // Delete the last reply and undo.
@@ -71,6 +78,8 @@ test("roleplay chat: send, stream, swipe, edit, persona switch, delete + undo", 
   // Cleanup.
   await rpc(page, "chats.delete", { id: chat.id });
   await rpc(page, "presets.delete", { id: preset.id });
+  await rpc(page, "characters.delete", { id: character.id });
+  await rpc(page, "personas.delete", { id: otherPersona.id });
   expect(presets.length).toBeGreaterThan(0);
 });
 
@@ -91,13 +100,15 @@ test("sidebar directories can be reordered by pointer and keyboard", async ({ pa
   const chatTitle = `${prefix}-chat`;
   const created: string[] = [];
   let chatId: string | undefined;
+  let characterId: string | undefined;
 
   try {
     for (const name of [firstName, secondName]) {
       const directory = await rpc<{ id: string }>(page, "directories.create", { name });
       created.push(directory.id);
     }
-    const [character] = await rpc<{ id: string }[]>(page, "characters.list", {});
+    const character = await createCharacter(page, `${prefix}-char`);
+    characterId = character.id;
     const chat = await rpc<{ id: string }>(page, "chats.create", { characterId: character.id });
     chatId = chat.id;
     await rpc(page, "chats.update", { id: chatId, directoryId: created[0], title: chatTitle });
@@ -150,6 +161,7 @@ test("sidebar directories can be reordered by pointer and keyboard", async ({ pa
     await expectOrder(firstName, secondName);
   } finally {
     if (chatId) await rpc(page, "chats.delete", { id: chatId });
+    if (characterId) await rpc(page, "characters.delete", { id: characterId });
     for (const id of created) await rpc(page, "directories.delete", { id });
   }
 });

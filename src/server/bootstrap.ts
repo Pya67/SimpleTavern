@@ -3,7 +3,7 @@ import path from "node:path";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { characters, messages, personas, presets, promptTemplates, settings } from "@/lib/db/schema";
+import { messages, personas, presets, promptTemplates, settings } from "@/lib/db/schema";
 import {
   DEFAULT_COMPACTION,
   DEFAULT_MODEL,
@@ -11,7 +11,6 @@ import {
   DEFAULT_PRESET_PARAMS,
   DEFAULT_TEMPLATE_BLOCKS,
   DEFAULT_UI,
-  DEMO_CHARACTER,
   LEGACY_BLOCK_CONTENT,
   LEGACY_COMPACTION_PROMPTS,
 } from "@/lib/defaults";
@@ -86,8 +85,6 @@ export async function ensureDefaults() {
   const [anyPreset] = await db.select({ id: presets.id }).from(presets).limit(1);
   if (!anyPreset) {
     const [p] = await db.insert(presets).values({ name: "Balanced RP", modelId: DEFAULT_MODEL, params: DEFAULT_PRESET_PARAMS }).returning();
-    await db.insert(presets).values({ name: "Creative (hot)", modelId: DEFAULT_MODEL, params: { ...DEFAULT_PRESET_PARAMS, temperature: 1.2, minP: 0.08 } });
-    await db.insert(presets).values({ name: "Thinking", modelId: "mock/tavern-thinker", params: { ...DEFAULT_PRESET_PARAMS, reasoning: { enabled: true, effort: "medium" } } });
     patch.defaultPresetId = p.id;
   }
   const [anyTpl] = await db.select({ id: promptTemplates.id }).from(promptTemplates).limit(1);
@@ -112,11 +109,8 @@ export async function ensureDefaults() {
   const [anyPersona] = await db.select({ id: personas.id }).from(personas).limit(1);
   if (!anyPersona) {
     const [p] = await db.insert(personas).values(DEFAULT_PERSONA).returning();
-    await db.insert(personas).values({ name: "Captain Vale", description: "A stern sky-ship captain with a soft spot for strays.", pronouns: "she/her", color: "#f472b6", sort: 1 });
     patch.defaultPersonaId = p.id;
   }
-  const [anyChar] = await db.select({ id: characters.id }).from(characters).limit(1);
-  if (!anyChar) await db.insert(characters).values(DEMO_CHARACTER);
   if (Object.keys(patch).length) await db.update(settings).set(patch).where(eq(settings.id, 1));
 }
 

@@ -21,7 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { proc, RpcError } from "@/server/rpc";
 import { characterDraftInput, draftCharacterField } from "@/server/character-writing";
-import { DEFAULT_COMPACTION, DEFAULT_PRESET_PARAMS, DEFAULT_TEMPLATE_BLOCKS, DEFAULT_UI } from "@/lib/defaults";
+import { DEFAULT_COMPACTION, DEFAULT_MODEL, DEFAULT_PRESET_PARAMS, DEFAULT_TEMPLATE_BLOCKS, DEFAULT_UI } from "@/lib/defaults";
 import { encrypt } from "@/lib/crypto";
 import { checkKey, listModels } from "@/lib/llm/models";
 import { isMock } from "@/lib/llm/openrouter";
@@ -248,7 +248,7 @@ const presetProcs = {
   "presets.create": proc(presetInput.partial().extend({ name: z.string().min(1) }), async (input) => {
     const [p] = await db
       .insert(presets)
-      .values({ name: input.name, modelId: input.modelId ?? "mock/tavern-storyteller", params: (input.params as PresetParams) ?? DEFAULT_PRESET_PARAMS, contextSize: input.contextSize ?? null })
+      .values({ name: input.name, modelId: input.modelId ?? DEFAULT_MODEL, params: (input.params as PresetParams) ?? DEFAULT_PRESET_PARAMS, contextSize: input.contextSize ?? null })
       .returning();
     return p;
   }),
