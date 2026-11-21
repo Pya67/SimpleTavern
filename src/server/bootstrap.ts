@@ -1,0 +1,86 @@
+import "server-only";
+import path from "node:path";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { characters, messages, personas, presets, promptTemplates, settings } from "@/lib/db/schema";
+import {
+  DEFAULT_COMPACTION,
+  DEFAULT_MODEL,
+  DEFAULT_PERSONA,
+  DEFAULT_PRESET_PARAMS,
+  DEFAULT_TEMPLATE_BLOCKS,
+  DEFAULT_UI,
+  DEMO_CHARACTER,
+} from "@/lib/defaults";
+import { setJobHandlers, startWorkers } from "@/lib/jobs/boss";
+import { runCompaction, runTitle } from "@/lib/memory/run";
+import { writeScheduledBackup } from "@/lib/backup";
+
+// Re-registered on every module evaluation so hot reloads update running workers.
+setJobHandlers({
+  compaction: async ({ chatId, force }) => {
+    await runCompaction(chatId, { force });
+  },
+  "chat-title": async ({ chatId }) => {
+    await runTitle(chatId);
+  },
+  backup: async () => {
+    const name = await writeScheduledBackup();
+    console.log(`[backup] wrote ${name}`);
+  },
+});
+
+const g = globalThis as unknown as { __booted?: Promise<void> };
+
+export function bootstrap() {
+  return (g.__booted ??= doBootstrap().catch((e) => {
+    g.__booted = undefined;
+    console.error("[bootstrap] failed", e);
+    throw e;
+  }));
+}
+
+async function doBootstrap() {
+  if (process.env.NODE_ENV === "production") {
+    if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.startsWith("change-me")) console.warn("[security] AUTH_SECRET is not set — using an insecure default. Set it!");
+    if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.startsWith("change-me")) console.warn("[security] ENCRYPTION_KEY is not set — using an insecure default. Set it!");
+    if (!["1", "true", "yes"].includes((process.env.AUTH_BYPASS ?? "").toLowerCase()) && !process.env.AUTH_PASSWORD_HASH) console.warn("[security] AUTH_PASSWORD_HASH is empty — nobody can log in. Run `pnpm auth:hash`.");
+  }
+  await migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
+  await ensureDefaults();
+  // Messages left "streaming" by a crash/restart are marked stopped so they can be continued.
+  await db.update(messages).set({ status: "stopped", finishReason: "interrupted", updatedAt: sql`updated_at` }).where(eq(messages.status, "streaming"));
+  await startWorkers();
+  console.log("[bootstrap] ready");
+}
+
+export async function ensureDefaults() {
+  let [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  if (!s) {
+    [s] = await db.insert(settings).values({ id: 1, compaction: DEFAULT_COMPACTION, ui: DEFAULT_UI }).returning();
+  }
+  const patch: Partial<typeof settings.$inferInsert> = {};
+
+  const [anyPreset] = await db.select({ id: presets.id }).from(presets).limit(1);
+  if (!anyPreset) {
+    const [p] = await db.insert(presets).values({ name: "Balanced RP", modelId: DEFAULT_MODEL, params: DEFAULT_PRESET_PARAMS }).returning();
+    await db.insert(presets).values({ name: "Creative (hot)", modelId: DEFAULT_MODEL, params: { ...DEFAULT_PRESET_PARAMS, temperature: 1.2, minP: 0.08 } });
+    await db.insert(presets).values({ name: "Thinking", modelId: "mock/tavern-thinker", params: { ...DEFAULT_PRESET_PARAMS, reasoning: { enabled: true, effort: "medium" } } });
+    patch.defaultPresetId = p.id;
+  }
+  const [anyTpl] = await db.select({ id: promptTemplates.id }).from(promptTemplates).limit(1);
+  if (!anyTpl) {
+    const [t] = await db.insert(promptTemplates).values({ name: "Default", blocks: DEFAULT_TEMPLATE_BLOCKS }).returning();
+    patch.defaultTemplateId = t.id;
+  }
+  const [anyPersona] = await db.select({ id: personas.id }).from(personas).limit(1);
+  if (!anyPersona) {
+    const [p] = await db.insert(personas).values(DEFAULT_PERSONA).returning();
+    await db.insert(personas).values({ name: "Captain Vale", description: "A stern sky-ship captain with a soft spot for strays.", pronouns: "she/her", color: "#f472b6", sort: 1 });
+    patch.defaultPersonaId = p.id;
+  }
+  const [anyChar] = await db.select({ id: characters.id }).from(characters).limit(1);
+  if (!anyChar) await db.insert(characters).values(DEMO_CHARACTER);
+  if (Object.keys(patch).length) await db.update(settings).set(patch).where(eq(settings.id, 1));
+}

@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tavern
+      POSTGRES_PASSWORD: tavern
+      POSTGRES_DB: tavern
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tavern -d tavern"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Self-hosted app. Start with: docker compose --profile app up -d --build
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tavern:tavern@postgres:5432/tavern
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_BYPASS: ${AUTH_BYPASS:-false}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MOCK: ${OPENROUTER_MOCK:-false}
+    volumes:
+      - appdata:/data
+
+  nginx:
+    profiles: ["app"]
+    build:
+      context: .
+      target: nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "127.0.0.1:${NGINX_PORT:-3000}:80"
+
+volumes:
+  pgdata:
+  appdata:

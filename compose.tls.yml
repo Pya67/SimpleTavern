@@ -1,0 +1,20 @@
+services:
+  nginx:
+    ports:
+      - "${NGINX_TLS_PORT:-443}:443"
+    configs:
+      - source: nginx_https
+        target: /etc/nginx/tls.d/https.conf
+    secrets:
+      - nginx_certificate
+      - nginx_certificate_key
+
+configs:
+  nginx_https:
+    file: ./nginx/https.conf
+
+secrets:
+  nginx_certificate:
+    file: ${TLS_CERT_FILE:?Set TLS_CERT_FILE to the full-chain certificate path}
+  nginx_certificate_key:
+    file: ${TLS_KEY_FILE:?Set TLS_KEY_FILE to the private key path}

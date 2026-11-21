@@ -1,0 +1,14 @@
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  esbuild: true
+  "@node-rs/argon2": true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/gateway@4.0.151'
+  - '@ai-sdk/mcp@2.0.102'
+  - '@ai-sdk/provider-utils@5.0.83'
+  - '@ai-sdk/react@4.0.182'
+  - '@tanstack/query-core@5.108.2'
+  - '@tanstack/react-query@5.108.2'
+  - ai@7.0.178
+  - lucide-react@1.77.0

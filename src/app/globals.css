@@ -1,0 +1,571 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "streamdown/styles.css";
+
+@source "../../node_modules/streamdown/dist/*.js";
+
+@custom-variant dark (&:is(.dark *, .black *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--app-font, var(--font-inter));
+  --font-serif: var(--font-literata);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--app-font, var(--font-inter));
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-bubble-user: var(--bubble-user);
+  --color-bubble-char: var(--bubble-char);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Light: pure white page; panels and your bubbles carry the tone (hues come from the accent palette below) */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2 0.015 var(--nh));
+  --card: oklch(1 0 var(--nh));
+  --card-foreground: oklch(0.2 0.015 var(--nh));
+  --popover: oklch(1 0 var(--nh));
+  --popover-foreground: oklch(0.2 0.015 var(--nh));
+  --primary: oklch(0.25 0.02 var(--nh));
+  --primary-foreground: oklch(0.985 0.005 var(--nh));
+  --secondary: oklch(0.955 0.01 var(--nh));
+  --secondary-foreground: oklch(0.25 0.02 var(--nh));
+  --muted: oklch(0.955 0.01 var(--nh));
+  --muted-foreground: oklch(0.5 0.02 var(--nh));
+  --accent: oklch(0.945 0.015 var(--nh));
+  --accent-foreground: oklch(0.25 0.02 var(--nh));
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.9 0.012 var(--nh));
+  --input: oklch(0.9 0.012 var(--nh));
+  --ring: oklch(0.7 calc(var(--ac) * 0.88) var(--ah));
+  --brand: oklch(0.72 var(--ac) var(--ah));
+  --brand-foreground: oklch(0.2 0.03 var(--ah));
+  /* Your messages: the same soft grey as panels, so they read on the white page. */
+  --bubble-user: oklch(0.955 0.004 var(--nh));
+  --bubble-user-foreground: var(--foreground);
+  --bubble-char: oklch(1 0 var(--nh));
+  --chart-1: oklch(0.72 var(--ac) var(--ah));
+  --chart-2: oklch(0.6 0.12 200);
+  --chart-3: oklch(0.55 0.15 300);
+  --chart-4: oklch(0.65 0.15 145);
+  --chart-5: oklch(0.6 0.2 25);
+  --radius: 0.75rem;
+  --sidebar: oklch(1 0 0); /* white, like the page */
+  --sidebar-foreground: oklch(0.2 0.015 var(--nh));
+  --sidebar-primary: oklch(0.72 var(--ac) var(--ah));
+  --sidebar-primary-foreground: oklch(0.2 0.03 var(--ah));
+  --sidebar-accent: oklch(0.93 0.015 var(--nh));
+  --sidebar-accent-foreground: oklch(0.2 0.015 var(--nh));
+  --sidebar-border: oklch(0.9 0.012 var(--nh));
+  --sidebar-ring: oklch(0.7 calc(var(--ac) * 0.88) var(--ah));
+  --dialogue: oklch(0.5 calc(var(--ac) * 0.8) var(--ah));
+  --action: oklch(0.48 0.02 var(--nh));
+}
+
+/* Dark: candle-lit tavern (also the base for Black) */
+.dark,
+.black {
+  --background: oklch(0.165 0.008 var(--nh));
+  --foreground: oklch(0.93 0.01 var(--nh));
+  --card: oklch(0.2 0.009 var(--nh));
+  --card-foreground: oklch(0.93 0.01 var(--nh));
+  --popover: oklch(0.215 0.01 var(--nh));
+  --popover-foreground: oklch(0.93 0.01 var(--nh));
+  --primary: oklch(0.93 0.01 var(--nh));
+  --primary-foreground: oklch(0.2 0.01 var(--nh));
+  --secondary: oklch(0.255 0.01 var(--nh));
+  --secondary-foreground: oklch(0.93 0.01 var(--nh));
+  --muted: oklch(0.24 0.009 var(--nh));
+  --muted-foreground: oklch(0.68 0.015 var(--nh));
+  --accent: oklch(0.26 0.012 var(--nh));
+  --accent-foreground: oklch(0.95 0.01 var(--nh));
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0.02 var(--nh) / 9%);
+  --input: oklch(1 0.02 var(--nh) / 13%);
+  --ring: oklch(0.78 calc(var(--ac) * 0.94) var(--ah) / 60%);
+  --brand: oklch(0.8 calc(var(--ac) * 0.94) var(--ah));
+  --brand-foreground: oklch(0.2 0.03 var(--ah));
+  --bubble-user: oklch(0.27 0.025 var(--ah));
+  --bubble-user-foreground: var(--foreground);
+  --bubble-char: oklch(0.205 0.009 var(--nh));
+  --chart-1: oklch(0.8 calc(var(--ac) * 0.94) var(--ah));
+  --chart-2: oklch(0.7 0.12 200);
+  --chart-3: oklch(0.7 0.15 300);
+  --chart-4: oklch(0.72 0.15 145);
+  --chart-5: oklch(0.7 0.19 25);
+  --sidebar: oklch(0.185 0.008 var(--nh));
+  --sidebar-foreground: oklch(0.93 0.01 var(--nh));
+  --sidebar-primary: oklch(0.8 calc(var(--ac) * 0.94) var(--ah));
+  --sidebar-primary-foreground: oklch(0.2 0.03 var(--ah));
+  --sidebar-accent: oklch(0.25 0.012 var(--nh));
+  --sidebar-accent-foreground: oklch(0.95 0.01 var(--nh));
+  --sidebar-border: oklch(1 0.02 var(--nh) / 8%);
+  --sidebar-ring: oklch(0.78 calc(var(--ac) * 0.94) var(--ah) / 60%);
+  --dialogue: oklch(0.86 calc(var(--ac) * 0.7) var(--ah));
+  --action: oklch(0.72 0.02 var(--nh));
+}
+
+/* Accent palettes (Settings → Appearance). Neutrals take a faint tint of the accent hue. */
+:root {
+  --ah: 65;
+  --ac: 0.16;
+  --nh: 70;
+}
+[data-accent="amber"] {
+  --ah: 65;
+  --ac: 0.16;
+  --nh: 70;
+}
+[data-accent="rose"] {
+  --ah: 12;
+  --ac: 0.17;
+  --nh: 17;
+}
+[data-accent="crimson"] {
+  --ah: 25;
+  --ac: 0.2;
+  --nh: 30;
+}
+[data-accent="pink"] {
+  --ah: 350;
+  --ac: 0.17;
+  --nh: 355;
+}
+[data-accent="violet"] {
+  --ah: 300;
+  --ac: 0.17;
+  --nh: 305;
+}
+[data-accent="indigo"] {
+  --ah: 270;
+  --ac: 0.16;
+  --nh: 275;
+}
+[data-accent="blue"] {
+  --ah: 245;
+  --ac: 0.15;
+  --nh: 250;
+}
+[data-accent="teal"] {
+  --ah: 190;
+  --ac: 0.12;
+  --nh: 195;
+}
+[data-accent="emerald"] {
+  --ah: 155;
+  --ac: 0.15;
+  --nh: 160;
+}
+[data-accent="lime"] {
+  --ah: 125;
+  --ac: 0.18;
+  --nh: 130;
+}
+/* White is monochrome: pure white on dark/black, near-black on light so it stays visible. */
+[data-accent="white"] {
+  --ah: 0;
+  --ac: 0;
+  --nh: 260;
+}
+[data-accent="white"]:not(.dark):not(.black) {
+  --brand: oklch(0.25 0 0);
+  --brand-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.25 0 0);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --chart-1: oklch(0.25 0 0);
+  --ring: oklch(0.55 0 0);
+  --sidebar-ring: oklch(0.55 0 0);
+  --dialogue: oklch(0.3 0 0);
+}
+[data-accent="white"].dark,
+[data-accent="white"].black {
+  --brand: oklch(0.97 0 0);
+  --brand-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.97 0 0);
+  --sidebar-primary-foreground: oklch(0.18 0 0);
+  --chart-1: oklch(0.97 0 0);
+  --ring: oklch(0.9 0 0 / 60%);
+  --sidebar-ring: oklch(0.9 0 0 / 60%);
+  --dialogue: oklch(0.97 0 0);
+}
+
+/* Black: true OLED black surfaces on top of the dark theme. */
+.black {
+  color-scheme: dark;
+  --background: oklch(0 0 0);
+  --card: oklch(0.12 0.004 var(--nh));
+  --popover: oklch(0.15 0.005 var(--nh));
+  --secondary: oklch(0.18 0.006 var(--nh));
+  --muted: oklch(0.17 0.006 var(--nh));
+  --accent: oklch(0.2 0.008 var(--nh));
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --bubble-char: oklch(0.12 0.004 var(--nh));
+  --sidebar: oklch(0 0 0);
+  --sidebar-accent: oklch(0.17 0.008 var(--nh));
+  --sidebar-border: oklch(1 0 0 / 9%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--brand) 35%, transparent);
+  }
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+}
+
+/* ---------- Grain surfaces ----------
+   Borderless panels: the surface is set apart by tone plus a fine film grain,
+   not a stroke. The grain sits on a pseudo-element under the content. */
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.14;
+  --grain-blend: multiply;
+  --surface-well: color-mix(in oklch, var(--foreground) 4%, transparent);
+  /* On the white light-mode page a white panel would vanish, so panels are a soft grey. */
+  --surface-panel: oklch(0.965 0.004 var(--nh));
+}
+.dark,
+.black {
+  --grain-opacity: 0.11;
+  --grain-blend: screen;
+  --surface-well: color-mix(in oklch, var(--foreground) 4.5%, transparent);
+  --surface-panel: var(--card);
+}
+/* These sit in the components layer so Tailwind utilities on the same element win:
+   `bg-brand/12` tints a selected surface, `fixed`/`absolute` reposition a grain overlay. */
+@layer components {
+  /* `grain` adds only the texture over whatever background the element has;
+     `surface-grain` is the standard panel: panel tone plus grain. */
+  .surface-grain {
+    background-color: var(--surface-panel);
+  }
+  .grain,
+  .surface-grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .grain::before,
+  .surface-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: var(--grain);
+    background-size: 180px 180px;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: var(--grain-blend);
+    pointer-events: none;
+  }
+  /* A recessed area inside a grain surface (previews, disclosures). */
+  .surface-well {
+    background-color: var(--surface-well);
+  }
+}
+/* Your message bubble. */
+.bubble-user {
+  color: var(--bubble-user-foreground);
+}
+/* Opt-in (settings, side panel, list pages): shared controls inside drop their outline and
+   sit as filled wells; keyboard focus keeps a ring. Inputs marked `data-bare` are skipped:
+   they sit inside a field that already draws the well (the chip inputs). */
+.borderless-controls
+  :is(
+    [data-slot="select-trigger"],
+    [data-slot="button"],
+    [data-slot="popover-trigger"],
+    [data-slot="tabs-trigger"],
+    [data-slot="textarea"],
+    [data-slot="input"],
+    input[type="number"],
+    input[type="text"]:not([data-bare]),
+    input:not([type]):not([data-bare])
+  ) {
+  border-color: transparent;
+}
+.borderless-controls :is([data-slot="textarea"], [data-slot="input"], input[type="number"], input[type="text"]:not([data-bare]), input:not([type]):not([data-bare])) {
+  background-color: var(--surface-well);
+}
+.borderless-controls :is([data-slot="textarea"], [data-slot="input"], input[type="number"], input[type="text"]:not([data-bare]), input:not([type]):not([data-bare])):focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 60%, transparent);
+}
+.borderless-controls :is([data-slot="select-trigger"], [data-slot="popover-trigger"]:not([aria-label="Custom accent"])) {
+  background-color: var(--surface-well);
+}
+
+/* ---------- Roleplay prose ---------- */
+.rp-prose {
+  font-family: var(--chat-font, inherit);
+  font-size: var(--chat-font-size, 15px);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  /* Set from Settings → Appearance → Text opacity. */
+  opacity: var(--chat-text-opacity, 1);
+}
+.rp-prose p {
+  margin: 0 0 0.75em;
+}
+/* Your own messages keep single line breaks as typed (plain markdown would join the lines). */
+.user-msg .rp-prose p {
+  white-space: pre-line;
+}
+.rp-prose > *:last-child,
+.rp-prose > *:last-child > *:last-child {
+  margin-bottom: 0;
+}
+.rp-prose em {
+  color: var(--action);
+  font-style: italic;
+}
+.rp-prose strong {
+  font-weight: 650;
+}
+.rp-prose q {
+  quotes: none;
+  color: var(--dialogue);
+}
+.rp-prose q em {
+  color: inherit;
+}
+.rp-prose .rp-ooc {
+  opacity: 0.55;
+  font-size: 0.92em;
+}
+.rp-prose ul,
+.rp-prose ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0 0.75em;
+}
+.rp-prose ul {
+  list-style: disc;
+}
+.rp-prose ol {
+  list-style: decimal;
+}
+.rp-prose blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.9em;
+  color: var(--muted-foreground);
+}
+.rp-prose code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.35em;
+  background: var(--muted);
+}
+.rp-prose hr {
+  margin: 1.2em 0;
+  border-color: var(--border);
+}
+.rp-prose h1,
+.rp-prose h2,
+.rp-prose h3 {
+  font-weight: 650;
+  margin: 0.8em 0 0.4em;
+  line-height: 1.3;
+}
+.rp-prose a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.layout-book .rp-prose {
+  font-family: var(--chat-font, var(--font-serif));
+  font-size: calc(var(--chat-font-size, 15px) + 1.5px);
+  line-height: 1.8;
+}
+
+/* Model reasoning: smaller, quieter, no roleplay colours. */
+.rp-prose.rp-thinking,
+.layout-book .rp-prose.rp-thinking {
+  font-family: inherit;
+  font-size: calc(var(--chat-font-size, 15px) - 2px);
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  opacity: calc(0.5 * var(--chat-text-opacity, 1));
+}
+.rp-prose.rp-thinking p {
+  margin-bottom: 0.5em;
+}
+.rp-prose.rp-thinking em {
+  color: inherit;
+}
+.rp-prose.rp-thinking strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.rp-prose.rp-thinking ul,
+.rp-prose.rp-thinking ol {
+  margin: 0.2em 0 0.5em;
+}
+.rp-prose.rp-thinking li + li {
+  margin-top: 0.15em;
+}
+.rp-prose.rp-thinking h1,
+.rp-prose.rp-thinking h2,
+.rp-prose.rp-thinking h3 {
+  font-size: 1em;
+  color: var(--foreground);
+}
+
+/* Live markdown styling in text boxes (MarkdownTextarea). Nothing here may change character
+   widths, or the caret drifts away from the text: italic is synthetic (no italic face loaded) and
+   bold is a thicker stroke rather than a heavier weight. */
+.md-bold {
+  -webkit-text-stroke: 0.03em currentColor;
+}
+.md-italic {
+  font-style: italic;
+  color: var(--action);
+}
+.md-quote {
+  color: var(--dialogue);
+}
+.md-quote .md-italic {
+  color: inherit;
+}
+.md-ooc {
+  opacity: 0.55;
+}
+.md-mark {
+  opacity: 0.4;
+  -webkit-text-stroke: 0;
+}
+
+/* Streaming: each revealed chunk fades in as a unit (~5 chunks in flight at once).
+   Duration must match CHUNK_ANIM_MS in markdown.tsx. */
+@keyframes sd-chunkIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+.rp-chunk {
+  /* Gentle ease-in(-out): starts soft, no pop at the end. */
+  animation: sd-chunkIn 900ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+/* Breathing typing indicator */
+@keyframes st-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.typing-dot {
+  animation: st-breathe 1.2s var(--ease-spring) infinite;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes st-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: st-shimmer 2.2s linear infinite;
+}
+
+/* View transitions between routes */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
