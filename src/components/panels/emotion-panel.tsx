@@ -24,6 +24,7 @@ export function EmotionPanel({ info }: { info: ChatInfo }) {
   const qc = useQueryClient();
   const chatId = info.chat.id;
   const enabled = info.chat.emotionEnabled;
+  const showDesire = info.chat.emotionShowDesire ?? true;
   const name = info.character.name;
   const messages = useChat((s) => s.messages);
   const pending = useChat((s) => s.emotionPending);
@@ -48,6 +49,12 @@ export function EmotionPanel({ info }: { info: ChatInfo }) {
       await appraise(lastReply.id);
       refreshChat();
     }
+  };
+
+  const toggleDesire = async (on: boolean) => {
+    qc.setQueryData<ChatInfo>(qk.chat(chatId), (old) => (old ? { ...old, chat: { ...old.chat, emotionShowDesire: on } } : old));
+    await rpc("chats.update", { id: chatId, emotionShowDesire: on });
+    await refreshChat();
   };
 
   const reread = async () => {
@@ -87,6 +94,19 @@ export function EmotionPanel({ info }: { info: ChatInfo }) {
             </span>
             <Switch checked={enabled} onCheckedChange={toggle} className="mt-0.5" />
           </label>
+          {enabled && (
+            <label className="mt-4 flex items-start justify-between gap-3 border-t border-border/60 pt-4">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">Let the model see desire</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                  {showDesire
+                    ? `${name}'s desire level shapes their replies.`
+                    : `Still tracked here, but left out of the prompt, so it doesn't steer ${name}'s replies.`}
+                </span>
+              </span>
+              <Switch checked={showDesire} onCheckedChange={toggleDesire} className="mt-0.5" />
+            </label>
+          )}
         </Group>
       </Section>
 

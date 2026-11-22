@@ -39,6 +39,7 @@ const DESCRIBE: Record<EmotionName, string> = {
   disgust: "disgust (contempt, revulsion, finding something beneath them)",
   anger: "anger (irritation, resentment, rage)",
   anticipation: "anticipation (eagerness, curiosity, wanting what comes next)",
+  desire: "desire (sexual attraction to and arousal around {{user}}, being turned on; unwanted advances raise disgust or anger, not desire)",
 };
 
 const ins = (s: string, n: Names) => s.replaceAll("{{char}}", n.char).replaceAll("{{user}}", n.user);
@@ -74,7 +75,7 @@ const CAUSES: Record<string, string> = {
   defiance: "{{user}} defied, refused, argued with or ordered {{char}} around",
   neglect: "{{user}} ignored, dismissed or let {{char}} down",
   kindness: "{{user}} was kind, caring or comforting",
-  flirting: "{{user}} flirted, praised or got physically close",
+  flirting: "{{user}} flirted, seduced, praised or got physically or sexually close",
   humor: "{{user}} joked or teased",
   help: "{{user}} helped {{char}} or gave them something",
   respect: "{{user}} showed respect, deference or obedience",
@@ -89,7 +90,7 @@ const CAUSE_NOTE: Record<string, string> = {
   defiance: "{{user}} pushed back against them",
   neglect: "{{user}} brushed them off",
   kindness: "{{user}} was kind to them",
-  flirting: "{{user}} flirted with them",
+  flirting: "{{user}} came on to them",
   humor: "{{user}} teased them",
   help: "{{user}} helped them",
   respect: "{{user}} showed them respect",
@@ -105,6 +106,7 @@ const MOODS: Record<string, { group: string; criteria: string }> = {
   smug: { group: "Smug / Sus", criteria: "Smug, scheming, suspicious, contemptuous, mischievous" },
   happy: { group: "Happy", criteria: "Happy, cheerful, excited" },
   love: { group: "Love", criteria: "Affectionate, tender, smitten" },
+  aroused: { group: "Love", criteria: "Aroused, lustful, hot and bothered" },
 };
 
 export function appraisalQuestions(n: Names): Record<string, JevQuestion> {
@@ -194,6 +196,8 @@ export function readAppraisal(answers: JevAnswers, n: Names): Appraisal | null {
 
 const TEMPER_LEVELS = ["Almost never", "Rarely", "Sometimes", "Often", "Almost constantly"];
 const TEMPER_AT = [3, 15, 30, 45, 60];
+const DESIRE_LEVELS = ["None at all", "A faint spark", "Noticeable attraction", "Strong attraction", "Can barely keep it in check"];
+const DESIRE_AT = [0, 10, 25, 42, 60];
 
 const START_LEVELS = [
   "Hostile: hates {{user}} or wants to harm them",
@@ -209,11 +213,21 @@ const START_AT = [-70, -45, -20, 0, 15, 40, 70];
 export function baselineQuestions(n: Names): Record<string, JevQuestion> {
   const q: Record<string, JevQuestion> = {};
   for (const e of EMOTIONS) {
-    q[e] = {
-      type: "score",
-      instructions: ins(`From the character sheet and scenario: on an ordinary, uneventful day, how often does {{char}} feel ${DESCRIBE[e]}?`, n),
-      criteria: TEMPER_LEVELS,
-    };
+    q[e] =
+      e === "desire"
+        ? {
+            type: "score",
+            instructions: ins(
+              "At the very start of this scenario, how much sexual attraction or arousal does {{char}} feel toward {{user}}? Use the character sheet, scenario, greeting and any shared history.",
+              n,
+            ),
+            criteria: DESIRE_LEVELS,
+          }
+        : {
+            type: "score",
+            instructions: ins(`From the character sheet and scenario: on an ordinary, uneventful day, how often does {{char}} feel ${DESCRIBE[e]}?`, n),
+            criteria: TEMPER_LEVELS,
+          };
   }
   q.affection = {
     type: "score",
@@ -233,7 +247,7 @@ export function readBaseline(answers: JevAnswers): EmotionBaseline | null {
   for (const e of EMOTIONS) {
     const s = scoreOf(answers[e]);
     if (s == null) continue;
-    v[e] = Math.round(lerp(TEMPER_AT, s));
+    v[e] = Math.round(lerp(e === "desire" ? DESIRE_AT : TEMPER_AT, s));
     any = true;
   }
   const a = scoreOf(answers.affection);

@@ -466,6 +466,7 @@ const chatProcs = {
       authorsNoteDepth: z.number().int().min(0).max(100).optional(),
       lorebookIds: z.array(id).optional(),
       emotionEnabled: z.boolean().optional(),
+      emotionShowDesire: z.boolean().optional(),
     }),
     async ({ id: chatId, lorebookIds, ...rest }) => {
       if (Object.keys(rest).length) await db.update(chats).set(rest).where(eq(chats.id, chatId));

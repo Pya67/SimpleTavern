@@ -394,6 +394,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
 
 const HOSTILE = /\b(hate|stupid|idiot|shut up|kill|ugly|pathetic|useless|liar|slap|punch|loser|disgusting)\b/i;
 const KIND = /\b(thank|sorry|love|kind|hug|beautiful|help|gift|friend|care|smile)\b/i;
+const FLIRT = /\b(kiss|sexy|hot|touch|bed|undress|seduce|flirt)\b/i;
 const VILLAIN = /\b(villain|cruel|evil|sadist|captor|tyrant|hates?|despises?|rival|enemy)\b/i;
 
 /**
@@ -405,12 +406,13 @@ function mockDecisions(body: { state?: unknown; questions?: Record<string, { typ
   const exchange = (state.latest_exchange ?? []).map((m) => m.text ?? "").join("\n");
   const hostile = HOSTILE.test(exchange);
   const kind = !hostile && KIND.test(exchange);
+  const flirt = !hostile && FLIRT.test(exchange);
   const villain = VILLAIN.test(JSON.stringify(state.character ?? ""));
   const answers: Record<string, unknown> = {};
   for (const [key, q] of Object.entries(body.questions ?? {})) {
     if (q.type === "choice") {
       const keys = Object.keys((q.criteria as Record<string, string>) ?? {});
-      const want = key === "mood" ? (hostile ? "angry" : kind ? "happy" : "neutral") : hostile ? "insult" : kind ? "kindness" : "nothing";
+      const want = key === "mood" ? (hostile ? "angry" : flirt ? "aroused" : kind ? "happy" : "neutral") : hostile ? "insult" : flirt ? "flirting" : kind ? "kindness" : "nothing";
       answers[key] = { type: "choice", choice: keys.includes(want) ? want : keys[0], confidence: 0.7 };
     } else if (q.type === "score") {
       const levels = Array.isArray(q.criteria) ? q.criteria.length : 5;
@@ -419,6 +421,7 @@ function mockDecisions(body: { state?: unknown; questions?: Record<string, { typ
       if (baselineQ) score = key === "affection" ? (villain ? 1.2 : 3) : villain && ["anger", "disgust"].includes(key) ? 2.6 : 1.5;
       else if (key === "affection") score = hostile ? 1 : kind ? 4.4 : 3;
       else if (["anger", "disgust", "sadness"].includes(key)) score = hostile ? 3.5 : 2;
+      else if (key === "desire") score = hostile ? 0.5 : flirt ? 3.6 : 2;
       else if (["joy", "trust"].includes(key)) score = hostile ? 0.8 : kind ? 3 : 2;
       else score = 2;
       answers[key] = { type: "score", score: Math.min(levels - 1, score), confidence: 0.6 };

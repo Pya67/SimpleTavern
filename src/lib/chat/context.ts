@@ -111,7 +111,7 @@ export function emotionForPrompt(ctx: ChatContext, history: Pick<MessageView, "r
   const baseline = ctx.chat.emotionBaseline ? { ...NEUTRAL_BASELINE, ...ctx.chat.emotionBaseline } : null;
   const raw = latestEmotion(history);
   const state = raw ? normalizeState(raw, baseline ?? NEUTRAL_BASELINE) : baseline ? initialState(baseline) : null;
-  return state ? describeForPrompt(state) : undefined;
+  return state ? describeForPrompt(state, { hideDesire: !ctx.chat.emotionShowDesire }) : undefined;
 }
 
 export function buildForContext(

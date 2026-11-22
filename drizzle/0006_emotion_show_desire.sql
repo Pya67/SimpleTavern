@@ -1,0 +1,1 @@
+ALTER TABLE "chats" ADD COLUMN "emotion_show_desire" boolean DEFAULT true NOT NULL;

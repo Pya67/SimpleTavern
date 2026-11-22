@@ -43,6 +43,13 @@
       "when": 1795274164659,
       "tag": "0005_emotion_default_on",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795386605369,
+      "tag": "0006_emotion_show_desire",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,7 @@ import { cn } from "cn";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { EMOTIONS, affectionWord, dominant, type EmotionName, type EmotionState, type EmotionVector } from "@/lib/emotion/engine";
 
-/** Plutchik's wheel hues, at a lightness that reads on both themes. */
+/** Plutchik's wheel hues (plus pink for desire), at a lightness that reads on both themes. */
 export const EMOTION_COLOR: Record<EmotionName, string> = {
   joy: "oklch(0.82 0.15 90)",
   trust: "oklch(0.75 0.15 135)",
@@ -14,6 +14,7 @@ export const EMOTION_COLOR: Record<EmotionName, string> = {
   disgust: "oklch(0.6 0.15 310)",
   anger: "oklch(0.63 0.2 25)",
   anticipation: "oklch(0.74 0.15 55)",
+  desire: "oklch(0.68 0.19 355)",
 };
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -34,7 +35,7 @@ export function EmotionBars({ v, baseline, only, compact }: { v: EmotionVector; 
               transition={{ type: "spring", stiffness: 140, damping: 22 }}
             />
             {/* Resting level: where this emotion drifts back to. */}
-            {baseline && <span className="absolute inset-y-0 w-px bg-foreground/40" style={{ left: `${baseline[e]}%` }} aria-hidden />}
+            {baseline?.[e] != null && <span className="absolute inset-y-0 w-px bg-foreground/40" style={{ left: `${baseline[e]}%` }} aria-hidden />}
           </div>
           <span className="text-right tabular-nums text-muted-foreground">{v[e]}</span>
         </div>

@@ -15,7 +15,7 @@
 
 import { KAOMOJI_GROUPS } from "@/lib/kaomoji";
 
-export const EMOTIONS = ["joy", "trust", "fear", "surprise", "sadness", "disgust", "anger", "anticipation"] as const;
+export const EMOTIONS = ["joy", "trust", "fear", "surprise", "sadness", "disgust", "anger", "anticipation", "desire"] as const;
 export type EmotionName = (typeof EMOTIONS)[number];
 export type EmotionVector = Record<EmotionName, number>;
 
@@ -72,6 +72,8 @@ export const NEUTRAL_BASELINE: EmotionVector = {
   disgust: 4,
   anger: 4,
   anticipation: 20,
+  /** Sexual attraction / arousal toward {{user}} ("horny level"). */
+  desire: 3,
 };
 
 /** The mood faces from the app's kaomoji list (animals carry no mood, so they're left out). */
@@ -89,6 +91,7 @@ const EMOTION_FACES: Record<EmotionName, readonly string[]> = {
   disgust: groupOf("Smug / Sus"),
   anger: groupOf("Angry"),
   anticipation: groupOf("Smug / Sus"),
+  desire: groupOf("Love"),
 };
 
 /** A face for the strongest emotion; `seed` (e.g. the label) varies it stably within the group. */
@@ -123,13 +126,14 @@ const WORDS: Record<EmotionName, [string, string, string]> = {
   disgust: ["put off", "disgusted", "revolted"],
   anger: ["irritated", "angry", "furious"],
   anticipation: ["interested", "eager", "consumed by anticipation"],
+  desire: ["flirty", "aroused", "burning with desire"],
 };
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const num = (x: unknown, fallback = 0) => (typeof x === "number" && Number.isFinite(x) ? x : typeof x === "string" && x.trim() && Number.isFinite(Number(x)) ? Number(x) : fallback);
 
-/** Emotions whose rise feels good; the rest (fear, sadness, disgust, anger) hurt when provoked. */
-const PLEASANT: ReadonlySet<EmotionName> = new Set(["joy", "trust", "anticipation"]);
+/** Emotions whose rise feels good (desire too: slow to build, quick to kill); the rest (fear, sadness, disgust, anger) hurt when provoked. */
+const PLEASANT: ReadonlySet<EmotionName> = new Set(["joy", "trust", "anticipation", "desire"]);
 
 export function initialState(baseline: EmotionBaseline = NEUTRAL_BASELINE): EmotionState {
   const v = {} as EmotionVector;
@@ -160,8 +164,10 @@ export function autoLabel(v: EmotionVector) {
 export function step(prev: EmotionState, appraisal: Appraisal, baseline: EmotionBaseline = NEUTRAL_BASELINE, cfg: EngineConfig = DEFAULT_ENGINE): EmotionState {
   const v = {} as EmotionVector;
   for (const e of EMOTIONS) {
-    const cur = clamp(num(prev.v[e], baseline[e]), 0, 100);
-    const decayed = cur + (baseline[e] - cur) * cfg.decay;
+    // Baselines saved before an emotion existed don't have it.
+    const rest = clamp(num(baseline[e], NEUTRAL_BASELINE[e]), 0, 100);
+    const cur = clamp(num(prev.v[e], rest), 0, 100);
+    const decayed = cur + (rest - cur) * cfg.decay;
     const raw = clamp(num(appraisal.impulse[e]), -50, 50);
     const hurts = PLEASANT.has(e) ? raw < 0 : raw > 0;
     const impulse = raw * cfg.sensitivity * (hurts ? cfg.negativityBias : cfg.warmthBias);
@@ -191,7 +197,7 @@ export function normalizeState(x: unknown, baseline: EmotionBaseline = NEUTRAL_B
   if (!x || typeof x !== "object") return null;
   const o = x as Partial<EmotionState>;
   const v = {} as EmotionVector;
-  for (const e of EMOTIONS) v[e] = Math.round(clamp(num(o.v?.[e], baseline[e]), 0, 100));
+  for (const e of EMOTIONS) v[e] = Math.round(clamp(num(o.v?.[e], num(baseline[e], NEUTRAL_BASELINE[e])), 0, 100));
   return {
     v,
     affection: Math.round(clamp(num(o.affection), -100, 100)),
@@ -223,16 +229,28 @@ export function latestEmotion(path: { role: string; emotion?: EmotionState | nul
 }
 
 /** Plain description of a state: mood, strongest feelings, stance toward {{user}}, inner note. */
-export function describeState(s: EmotionState) {
-  const strong = dominant(s.v).filter((e) => s.v[e] >= 30).slice(0, 3);
-  const feelings = strong.length ? strong.map((e) => `${intensityWord(e, s.v[e])} (${e} ${s.v[e]}/100)`).join(", ") : "calm, no strong feelings";
+export interface DescribeOptions {
+  /** Leave desire out (the chat's "show desire to the model" switch is off). */
+  hideDesire?: boolean;
+}
+
+const DESIRE_WORDS = /\b(flirty|aroused|desire|lust\w*|horny|hot and bothered)\b/i;
+
+export function describeState(s: EmotionState, opts: DescribeOptions = {}) {
+  const v = opts.hideDesire ? { ...s.v, desire: 0 } : s.v;
+  const strong = dominant(v)
+    .filter((e) => v[e] >= 30)
+    .slice(0, 3);
+  const feelings = strong.length ? strong.map((e) => `${intensityWord(e, v[e])} (${e} ${v[e]}/100)`).join(", ") : "calm, no strong feelings";
+  // A label like "aroused" would give it away; describe the rest of the mood instead.
+  const label = opts.hideDesire && DESIRE_WORDS.test(s.label) ? autoLabel(v) : s.label;
   const sign = s.affection > 0 ? "+" : "";
-  let out = `mood: ${s.label}. Feeling ${feelings}. Toward {{user}}: ${affectionWord(s.affection)} (${sign}${s.affection}).`;
+  let out = `mood: ${label}. Feeling ${feelings}. Toward {{user}}: ${affectionWord(s.affection)} (${sign}${s.affection}).`;
   if (s.note) out += ` Inside: ${s.note}`;
   return out;
 }
 
 /** Prompt text injected near the end of the history. `{{char}}`/`{{user}}` resolve later. */
-export function describeForPrompt(s: EmotionState) {
-  return `[{{char}}'s current emotional state — ${describeState(s)} Let this color {{char}}'s tone, word choice, body language and decisions naturally. Feelings can shift in response to what happens next; don't name the emotions outright or mention numbers.]`;
+export function describeForPrompt(s: EmotionState, opts: DescribeOptions = {}) {
+  return `[{{char}}'s current emotional state — ${describeState(s, opts)} Let this color {{char}}'s tone, word choice, body language and decisions naturally. Feelings can shift in response to what happens next; don't name the emotions outright or mention numbers.]`;
 }

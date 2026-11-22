@@ -173,6 +173,8 @@ export const chats = pgTable(
     forkedFromChatId: uuid("forked_from_chat_id"),
     /** Emotion engine: track {{char}}'s feelings per reply and feed them into the prompt. */
     emotionEnabled: boolean("emotion_enabled").notNull().default(true),
+    /** Whether the chat model is told {{char}}'s desire level (it's always tracked and shown in the panel). */
+    emotionShowDesire: boolean("emotion_show_desire").notNull().default(true),
     /** Resting temperament the engine decays toward (estimated from the character on first use). */
     emotionBaseline: jsonb("emotion_baseline").$type<EmotionBaseline>(),
     totalCost: doublePrecision("total_cost").notNull().default(0),

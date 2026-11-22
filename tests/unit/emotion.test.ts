@@ -57,6 +57,20 @@ describe("emotion engine step", () => {
     expect(step(fond, { ...quiet, affection: -8 }).affection - 70).toBe(step(stranger, { ...quiet, affection: -8 }).affection);
   });
 
+  it("tracks desire: slow to build, quick to kill, and safe with old baselines", () => {
+    const s0 = initialState();
+    const up = step(s0, { ...quiet, impulse: { desire: 20 } }).v.desire - s0.v.desire;
+    const down = { ...s0, v: { ...s0.v, desire: 60 } };
+    const drop = 60 - step(down, { ...quiet, impulse: { desire: -20 } }).v.desire;
+    expect(up).toBeGreaterThan(0);
+    expect(drop).toBeGreaterThan(up);
+    const oldBaseline: Partial<typeof NEUTRAL_BASELINE> = { ...NEUTRAL_BASELINE };
+    delete oldBaseline.desire;
+    const s = step(s0, quiet, oldBaseline as typeof NEUTRAL_BASELINE);
+    expect(Number.isFinite(s.v.desire)).toBe(true);
+    expect(readBaseline({ desire: score(4) })!.desire).toBe(60);
+  });
+
   it("starts from the baseline's affection", () => {
     expect(initialState({ ...NEUTRAL_BASELINE, affection: -45 }).affection).toBe(-45);
     expect(initialState().affection).toBe(0);
@@ -174,6 +188,14 @@ describe("prompt integration", () => {
     // The length note stays right after the latest message.
     expect(r.messages[hi + 1].content).toContain("[Length:");
     expect(r.breakdown.items.some((i) => i.kind === "emotion")).toBe(true);
+  });
+
+  it("can hide desire from the model", () => {
+    const s = { ...initialState(), v: { ...initialState().v, desire: 80, anger: 40 }, label: "burning with desire" };
+    expect(describeForPrompt(s)).toContain("desire 80/100");
+    const hidden = describeForPrompt(s, { hideDesire: true });
+    expect(hidden).not.toMatch(/desire|aroused|flirty/);
+    expect(hidden).toContain("anger 40/100");
   });
 
   it("leaves it out when impersonating", () => {

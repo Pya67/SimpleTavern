@@ -284,6 +284,7 @@ export async function forkChat(chatId: string, uptoMessageId: string) {
       authorsNote: chat.authorsNote,
       authorsNoteDepth: chat.authorsNoteDepth,
       emotionEnabled: chat.emotionEnabled,
+      emotionShowDesire: chat.emotionShowDesire,
       emotionBaseline: chat.emotionBaseline,
       forkedFromChatId: chat.id,
     })
