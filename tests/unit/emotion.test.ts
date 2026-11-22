@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KAOMOJI_GROUPS } from "@/lib/kaomoji";
 import {
-  APPRAISAL_PROMPT,
   DEFAULT_ENGINE,
   MOOD_KAOMOJIS,
   cleanKaomoji,
@@ -11,11 +10,10 @@ import {
   initialState,
   latestEmotion,
   normalizeState,
-  parseAppraisal,
-  parseBaseline,
   step,
   type Appraisal,
 } from "@/lib/emotion/engine";
+import { appraisalQuestions, baselineQuestions, readAppraisal, readBaseline, type JevAnswers } from "@/lib/emotion/jev";
 import { buildPrompt, type BuildInput } from "@/lib/prompt/builder";
 import { DEFAULT_TEMPLATE_BLOCKS } from "@/lib/defaults";
 
@@ -41,6 +39,29 @@ describe("emotion engine step", () => {
     expect(s.v.anger).toBeGreaterThan(80);
   });
 
+  it("lets hurt land harder than kindness", () => {
+    const s0 = initialState();
+    const warmer = step(s0, { ...quiet, affection: 8 });
+    const colder = step(s0, { ...quiet, affection: -8 });
+    expect(Math.abs(colder.affection)).toBeGreaterThan(warmer.affection * 1.5);
+    const hurt = step(s0, { ...quiet, impulse: { anger: 20 } }).v.anger - s0.v.anger;
+    const glad = step(s0, { ...quiet, impulse: { joy: 20 } }).v.joy - s0.v.joy;
+    expect(hurt).toBeGreaterThan(glad);
+  });
+
+  it("makes warming up slower the warmer they already are", () => {
+    const fond = { ...initialState(), affection: 70 };
+    const stranger = initialState();
+    expect(step(fond, { ...quiet, affection: 8 }).affection - 70).toBeLessThan(step(stranger, { ...quiet, affection: 8 }).affection);
+    // Souring is not dampened.
+    expect(step(fond, { ...quiet, affection: -8 }).affection - 70).toBe(step(stranger, { ...quiet, affection: -8 }).affection);
+  });
+
+  it("starts from the baseline's affection", () => {
+    expect(initialState({ ...NEUTRAL_BASELINE, affection: -45 }).affection).toBe(-45);
+    expect(initialState().affection).toBe(0);
+  });
+
   it("clamps out-of-range impulses and limits affection per turn", () => {
     const s = step(initialState(), { ...quiet, impulse: { fear: 999 }, affection: 80 });
     expect(s.v.fear).toBeLessThanOrEqual(100);
@@ -62,32 +83,55 @@ describe("emotion engine step", () => {
     // Animals carry no mood.
     expect(MOOD_KAOMOJIS).not.toContain("ʕ•ᴥ•ʔ");
   });
-
-  it("lists every mood face by number in the appraisal prompt", () => {
-    for (const [i, k] of MOOD_KAOMOJIS.entries()) expect(APPRAISAL_PROMPT).toContain(`${i + 1} ${k}`);
-  });
 });
 
-describe("parsing model replies", () => {
-  it("reads fenced JSON with trailing commas and string numbers", () => {
-    const a = parseAppraisal('Sure!\n```json\n{"impulse":{"joy":"12","anger":-5,},"affection":3,"label":"Pleased","kaomoji":"2","note":"Glad they came back."}\n```');
-    expect(a).toEqual({ impulse: { joy: 12, anger: -5 }, affection: 3, label: "pleased", kaomoji: MOOD_KAOMOJIS[1], note: "Glad they came back." });
+const names = { char: "Mira", user: "Traveler" };
+const score = (n: number) => ({ type: "score" as const, score: n, confidence: 0.6 });
+const choice = (c: string, confidence = 0.7) => ({ type: "choice" as const, choice: c, confidence });
+
+describe("Jev questions and answers", () => {
+  it("asks one score per emotion plus affection, mood and cause, with names filled in", () => {
+    const q = appraisalQuestions(names);
+    for (const e of EMOTIONS) expect(q[e].type).toBe("score");
+    expect(Object.keys(q)).toEqual(expect.arrayContaining(["affection", "mood", "cause"]));
+    const text = JSON.stringify(q);
+    expect(text).toContain("Mira");
+    expect(text).toContain("Traveler");
+    expect(text).not.toContain("{{");
+    expect(JSON.stringify(baselineQuestions(names))).toContain("very start of this scenario");
   });
 
-  it("accepts flat emotion keys", () => {
-    expect(parseAppraisal('{"fear": 20, "label": "spooked"}')?.impulse).toEqual({ fear: 20 });
+  it("maps rubric scores onto impulses and affection", () => {
+    const a = readAppraisal({ anger: score(4), joy: score(0), trust: score(2.05), affection: score(1), mood: choice("angry"), cause: choice("insult") }, names)!;
+    expect(a.impulse.anger).toBe(40);
+    expect(a.impulse.joy).toBe(-40);
+    expect(a.impulse.trust).toBe(0); // jitter around "no change" is ignored
+    expect(a.affection).toBe(-8);
+    expect(KAOMOJI_GROUPS.find((g) => g.mood === "Angry")!.items).toContain(a.kaomoji);
+    expect(a.note).toBe("Traveler mocked them, and they think less of Traveler for it.");
   });
 
-  it("returns null for junk", () => {
-    expect(parseAppraisal("I can't do that.")).toBeNull();
-    expect(parseAppraisal("{}")).toBeNull();
+  it("interpolates fractional scores and skips unsure causes", () => {
+    const a = readAppraisal({ fear: score(3.5), affection: score(4.5), cause: choice("kindness", 0.1) }, names)!;
+    expect(a.impulse.fear).toBe(29);
+    expect(a.affection).toBe(5.5);
+    expect(a.note).toBe("");
+    expect(a.kaomoji).toBe("");
   });
 
-  it("parses and caps a baseline", () => {
-    const b = parseBaseline('{"joy": 95, "sadness": 30}')!;
-    expect(b.joy).toBe(70);
-    expect(b.sadness).toBe(30);
+  it("returns null when nothing usable came back", () => {
+    expect(readAppraisal({}, names)).toBeNull();
+    expect(readAppraisal({ mood: choice("happy") } as JevAnswers, names)).toBeNull();
+    expect(readBaseline({})).toBeNull();
+  });
+
+  it("reads a baseline with a starting affection", () => {
+    const b = readBaseline({ anger: score(4), joy: score(1), affection: score(1) })!;
+    expect(b.anger).toBe(60);
+    expect(b.joy).toBe(15);
     expect(b.trust).toBe(NEUTRAL_BASELINE.trust);
+    expect(b.affection).toBe(-45);
+    expect(initialState(b).affection).toBe(-45);
   });
 
   it("normalizes partial stored states", () => {

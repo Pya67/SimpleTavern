@@ -170,35 +170,6 @@ function summarize(text: string, r: () => number) {
   return body + fact;
 }
 
-/** Emotion appraisal: reacts to a few keywords in the exchange so the engine visibly moves. */
-function mockAppraisal(text: string, r: () => number) {
-  const t = text.toLowerCase();
-  const imp: Record<string, number> = { joy: 0, trust: 0, fear: 0, surprise: 0, sadness: 0, disgust: 0, anger: 0, anticipation: Math.round(r() * 10) };
-  let affection = Math.round(r() * 4 - 1);
-  let label = pick(r, ["amused", "curious", "guarded", "wry"]);
-  // Faces are list numbers (see the "Faces:" list in the appraisal prompt).
-  let kaomoji = pick(r, [16, 13, 1]);
-  const set = (i: Record<string, number>, l: string, face: number, aff?: number) => {
-    Object.assign(imp, i);
-    label = l;
-    kaomoji = face;
-    if (aff !== undefined) affection = aff;
-  };
-  if (/thank|love|kind|beautiful|friend|smile|hug/.test(t)) set({ joy: 22, trust: 14 }, "touched", 9, 6);
-  if (/sorry|sad|cry|lost|miss|died|alone/.test(t)) set({ sadness: 24, joy: -10 }, "melancholy", 20);
-  if (/hate|stupid|kill|fight|liar|shut up|idiot/.test(t)) set({ anger: 30, trust: -15 }, "bristling", 26, -8);
-  if (/scared|danger|monster|run|blood|dark/.test(t)) set({ fear: 26, anticipation: 10 }, "on edge", 30);
-  if (/secret|surprise|what\?|really\?|wow/.test(t)) set({ surprise: 25 }, "intrigued", 28);
-  if (r() > 0.5) imp.trust += 4;
-  return JSON.stringify({ impulse: imp, affection, label, kaomoji, note: `Weighing what was just said — ${label}, though not showing all of it.` });
-}
-
-function mockBaseline(r: () => number) {
-  const n = (base: number) => Math.round(base + r() * 15);
-  // Fenced, like many real models reply, to exercise the parser.
-  return "```json\n" + JSON.stringify({ joy: n(20), trust: n(15), fear: n(3), surprise: n(5), sadness: n(5), disgust: n(2), anger: n(3), anticipation: n(20) }) + "\n```";
-}
-
 function reasoningFor(char: string, lastUser: string) {
   return `The user said: "${lastUser.slice(0, 120)}". I should stay in character as ${char}, react to what they said, keep the tone warm but guarded, and move the scene forward without speaking for them. Maybe hint at a secret to keep things intriguing.`;
 }
@@ -282,8 +253,6 @@ async function chatCompletions(body: Json, signal?: AbortSignal | null): Promise
   const fieldDraft = sys.startsWith("You are editing one field of a roleplay character card.") ? characterFieldDraft(lastUser) : null;
   if (fieldDraft !== null) {
     content = fieldDraft;
-  } else if (/emotion engine for a roleplay character/i.test(sys)) {
-    content = /resting temperament/i.test(sys) ? mockBaseline(r) : mockAppraisal(lastUser, r);
   } else if (/memory keeper|Merge these consecutive story recaps/i.test(all)) {
     content = summarize(textOf(last?.content ?? ""), r);
   } else if (/short title/i.test(all)) {
@@ -307,7 +276,7 @@ async function chatCompletions(body: Json, signal?: AbortSignal | null): Promise
 
   const reasoningOpt = body.reasoning as { enabled?: boolean; exclude?: boolean; effort?: string } | undefined;
   const wantsReasoning = ((model as { reasoning?: boolean }).reasoning || reasoningOpt?.enabled) && reasoningOpt?.effort !== "none";
-  if (wantsReasoning && !reasoningOpt?.exclude && !/memory keeper|short title|emotion engine/i.test(all)) {
+  if (wantsReasoning && !reasoningOpt?.exclude && !/memory keeper|short title/i.test(all)) {
     reasoning = reasoningFor(char, lastUser);
   }
 
@@ -416,5 +385,44 @@ export const mockFetch: typeof fetch = async (input, init) => {
     else raw = String(init?.body ?? "{}");
     return chatCompletions(JSON.parse(raw), init?.signal);
   }
+  if (path.endsWith("/alpha/decisions") && method === "POST") {
+    const raw = typeof init?.body === "string" ? init.body : input instanceof Request ? await input.text() : String(init?.body ?? "{}");
+    return json(mockDecisions(JSON.parse(raw)));
+  }
   return json({ error: { code: 404, message: `Mock: no route for ${method} ${path}` } }, 404);
 };
+
+const HOSTILE = /\b(hate|stupid|idiot|shut up|kill|ugly|pathetic|useless|liar|slap|punch|loser|disgusting)\b/i;
+const KIND = /\b(thank|sorry|love|kind|hug|beautiful|help|gift|friend|care|smile)\b/i;
+const VILLAIN = /\b(villain|cruel|evil|sadist|captor|tyrant|hates?|despises?|rival|enemy)\b/i;
+
+/**
+ * Mock of the Decisions API (Jev). Keyword heuristics, enough to see the emotion engine move:
+ * insults sour the mood, kindness warms it a little, villainous character sheets start cold.
+ */
+function mockDecisions(body: { state?: unknown; questions?: Record<string, { type: string; instructions?: string; criteria?: unknown }> }) {
+  const state = (body.state ?? {}) as { latest_exchange?: { text?: string }[]; character?: unknown };
+  const exchange = (state.latest_exchange ?? []).map((m) => m.text ?? "").join("\n");
+  const hostile = HOSTILE.test(exchange);
+  const kind = !hostile && KIND.test(exchange);
+  const villain = VILLAIN.test(JSON.stringify(state.character ?? ""));
+  const answers: Record<string, unknown> = {};
+  for (const [key, q] of Object.entries(body.questions ?? {})) {
+    if (q.type === "choice") {
+      const keys = Object.keys((q.criteria as Record<string, string>) ?? {});
+      const want = key === "mood" ? (hostile ? "angry" : kind ? "happy" : "neutral") : hostile ? "insult" : kind ? "kindness" : "nothing";
+      answers[key] = { type: "choice", choice: keys.includes(want) ? want : keys[0], confidence: 0.7 };
+    } else if (q.type === "score") {
+      const levels = Array.isArray(q.criteria) ? q.criteria.length : 5;
+      const baselineQ = /ordinary|very start/.test(q.instructions ?? "");
+      let score: number;
+      if (baselineQ) score = key === "affection" ? (villain ? 1.2 : 3) : villain && ["anger", "disgust"].includes(key) ? 2.6 : 1.5;
+      else if (key === "affection") score = hostile ? 1 : kind ? 4.4 : 3;
+      else if (["anger", "disgust", "sadness"].includes(key)) score = hostile ? 3.5 : 2;
+      else if (["joy", "trust"].includes(key)) score = hostile ? 0.8 : kind ? 3 : 2;
+      else score = 2;
+      answers[key] = { type: "score", score: Math.min(levels - 1, score), confidence: 0.6 };
+    } else answers[key] = { type: "noul", noul: 0.5 };
+  }
+  return { model: "typesafe/jev-1.14", answers, usage: { input_tokens: 0, output_tokens: 0 } };
+}

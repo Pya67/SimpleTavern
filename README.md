@@ -382,7 +382,7 @@ The password hash is base64-wrapped because Next.js expands `$` in env values, a
 - **Streaming:** tokens go through an adaptive reveal buffer plus word-level blur-in, so bursty networks still read as steady typing.
 - **Message tree:** swipes, edits saved as branches, and regenerations are all siblings, and every parent remembers its active child. The visible conversation is the active path, loaded with a recursive CTE.
 - **Memory:** once uncompacted history passes a share of the context budget, the oldest messages are summarised by a pg-boss job. Each memory covers specific message IDs, so branching away or editing a covered message invalidates it automatically, and branch-only memories come back when you switch back.
-- **Emotion engine:** a cheap model appraises each reply, but a small deterministic state machine owns the numbers (decay toward baseline, inertia, clamping), which keeps moods coherent.
+- **Emotion engine:** Jev (`typesafe/jev-1.14`, via the OpenRouter Decisions API) scores each reply against typed rubrics, and a small deterministic state machine owns the numbers (decay toward baseline, inertia, clamping, and a negativity bias so hurt lands harder than kindness), which keeps moods coherent. The starting temperament and feelings toward you come from the character sheet, scenario, greeting and your persona.
 - **Prompt templates:** blocks with per-block roles and macros like `{{char}} {{user}} {{time}} {{date}} {{random:a,b}} {{roll:1d20}} {{idle_duration}}`.
 - **Lorebooks:** keyword, regex and secondary-key logic, recursion, probability, position/depth and token budgets.
 - **Character cards:** V1/V2/V3 import; export as V3 PNG with a V2 chunk for compatibility, or JSON.

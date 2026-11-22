@@ -1,62 +1,85 @@
 import "server-only";
-import { generateText } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { chats, messages } from "@/lib/db/schema";
 import { getPathFull, type MessageView } from "@/lib/chat/tree";
 import { loadChatContext, type ChatContext } from "@/lib/chat/context";
-import { getProvider } from "@/lib/llm/openrouter";
+import { baseUrl, getApiKey, isMock, orFetch } from "@/lib/llm/openrouter";
 import { applyMacros } from "@/lib/prompt/macros";
 import {
-  APPRAISAL_PROMPT,
-  BASELINE_PROMPT,
   NEUTRAL_BASELINE,
   describeState,
   initialState,
   latestEmotion,
   normalizeState,
-  parseAppraisal,
-  parseBaseline,
   step,
+  type EmotionBaseline,
   type EmotionState,
-  type EmotionVector,
 } from "@/lib/emotion/engine";
+import { JEV_MODEL, appraisalQuestions, baselineQuestions, readAppraisal, readBaseline, type JevAnswers, type JevQuestion } from "@/lib/emotion/jev";
 
 const g = globalThis as unknown as { __appraising?: Map<string, Promise<EmotionState | null>> };
 const inflight = (g.__appraising ??= new Map());
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s);
 
-async function ask(modelId: string, system: string, user: string) {
-  const provider = await getProvider();
-  const res = await generateText({
-    model: provider.chat(modelId),
-    instructions: system,
-    messages: [{ role: "user", content: user }],
-    temperature: 0.2,
-    maxOutputTokens: 400,
-    maxRetries: 1,
+/** OpenRouter Decisions API (…/api/alpha/decisions): Jev answers typed questions about a state. */
+async function decide(state: unknown, questions: Record<string, JevQuestion>): Promise<JevAnswers> {
+  const apiKey = isMock() ? "mock-key" : await getApiKey();
+  if (!apiKey) {
+    const e = new Error("No OpenRouter API key configured. Add one in Settings.");
+    (e as Error & { code?: string }).code = "no_key";
+    throw e;
+  }
+  const url = baseUrl().replace(/\/v1\/?$/, "") + "/alpha/decisions";
+  const res = await orFetch()(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      // Generic attribution; never send personal details.
+      "HTTP-Referer": "https://github.com/",
+      "X-Title": "SimpleTavern",
+    },
+    body: JSON.stringify({ model: JEV_MODEL, state, questions }),
+    signal: AbortSignal.timeout(30_000),
   });
-  return res.text;
+  if (!res.ok) throw new Error(`Jev ${res.status}: ${clip(await res.text(), 300)}`);
+  const body = (await res.json()) as { answers?: JevAnswers; data?: { answers?: JevAnswers } };
+  return body.answers ?? body.data?.answers ?? {};
 }
 
-const engineModel = (ctx: ChatContext) => ctx.compaction.modelId || ctx.modelId;
+const namesOf = (ctx: ChatContext) => ({ char: ctx.character.name, user: ctx.persona.name });
 
-/** The character's resting temperament; estimated once per chat from the character sheet. */
-export async function ensureBaseline(ctx: ChatContext): Promise<EmotionVector> {
+/** Who {{char}} is, for Jev's state. */
+function sheet(ctx: ChatContext, full: boolean) {
+  const macro = namesOf(ctx);
+  const m = (s: string, n: number) => (s.trim() ? clip(applyMacros(s, macro), n) : undefined);
+  return {
+    name: ctx.character.name,
+    personality: m(ctx.character.personality, full ? 1500 : 900),
+    description: m(ctx.character.description, full ? 2500 : 1200),
+    scenario: m(ctx.character.scenario, full ? 1200 : 600),
+  };
+}
+
+/**
+ * The character's resting temperament and starting stance toward {{user}}; read once per chat from
+ * the character sheet, scenario, greeting and persona.
+ */
+export async function ensureBaseline(ctx: ChatContext): Promise<EmotionBaseline> {
   if (ctx.chat.emotionBaseline) return { ...NEUTRAL_BASELINE, ...ctx.chat.emotionBaseline };
-  const macro = { char: ctx.character.name, user: ctx.persona.name };
-  const sheet = [
-    `Name: ${ctx.character.name}`,
-    ctx.character.personality && `Personality: ${clip(ctx.character.personality, 1500)}`,
-    ctx.character.description && `Description: ${clip(ctx.character.description, 2500)}`,
-    ctx.character.scenario && `Scenario: ${clip(ctx.character.scenario, 800)}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-  let baseline = NEUTRAL_BASELINE;
+  const macro = namesOf(ctx);
+  const path = await getPathFull(ctx.chat.id).catch(() => [] as MessageView[]);
+  const greeting = path.find((p) => p.role === "assistant")?.content || ctx.character.firstMessage;
+  const state = {
+    character: sheet(ctx, true),
+    user: { name: ctx.persona.name, description: ctx.persona.description?.trim() ? clip(applyMacros(ctx.persona.description, macro), 800) : undefined },
+    greeting: greeting?.trim() ? clip(applyMacros(greeting, macro), 1500) : undefined,
+  };
+  let baseline: EmotionBaseline = NEUTRAL_BASELINE;
   try {
-    baseline = parseBaseline(await ask(engineModel(ctx), applyMacros(BASELINE_PROMPT, macro), applyMacros(sheet, macro))) ?? NEUTRAL_BASELINE;
+    baseline = readBaseline(await decide(state, baselineQuestions(macro))) ?? NEUTRAL_BASELINE;
   } catch (e) {
     console.error("[emotion] baseline failed", e);
   }
@@ -104,21 +127,18 @@ async function doAppraise(messageId: string, opts: { force?: boolean }) {
     }
     lead.unshift(path[i]);
   }
-  const exchange = [...lead, path[idx]].map((m) => `${who(m)}: ${clip(m.content, m.id === messageId ? 3000 : 1500)}`).join("\n\n");
 
-  const macro = { char: ctx.character.name, user: ctx.persona.name };
-  const input = [
-    ctx.character.personality && `About ${ctx.character.name}: ${clip(applyMacros(ctx.character.personality, macro), 700)}`,
-    `${ctx.character.name}'s feelings before this exchange — ${applyMacros(describeState(prev), macro)}`,
-    `Latest exchange:\n${exchange}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const macro = namesOf(ctx);
+  const state = {
+    character: sheet(ctx, false),
+    feelings_before: applyMacros(describeState(prev), macro),
+    latest_exchange: [...lead, path[idx]].map((m) => ({ speaker: who(m), text: clip(m.content, m.id === messageId ? 3000 : 1500) })),
+  };
 
   let next: EmotionState;
   try {
-    const appraisal = parseAppraisal(await ask(engineModel(ctx), applyMacros(APPRAISAL_PROMPT, macro), input));
-    // Unparseable reply: let feelings settle a little instead of failing the turn.
+    const appraisal = readAppraisal(await decide(state, appraisalQuestions(macro)), macro);
+    // Nothing usable: let feelings settle a little instead of failing the turn.
     next = step(prev, appraisal ?? { impulse: {}, affection: 0, label: prev.label, kaomoji: prev.kaomoji, note: prev.note }, baseline);
   } catch (e) {
     console.error("[emotion] appraisal failed", e);

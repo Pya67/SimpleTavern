@@ -82,7 +82,7 @@ export function EmotionPanel({ info }: { info: ChatInfo }) {
             <span className="min-w-0">
               <span className="block text-sm font-medium">Track {name}&apos;s feelings</span>
               <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                After each reply, a quick read of how {name} feels. Moods build up, fade back toward their temperament, and shape the next replies. Uses the memory model: one small extra call per reply.
+                After each reply, a quick read of how {name} feels. Moods build up, fade back toward their temperament, and shape the next replies. Read by Jev, a fast decision model on OpenRouter: one tiny call per reply, a fraction of a cent.
               </span>
             </span>
             <Switch checked={enabled} onCheckedChange={toggle} className="mt-0.5" />

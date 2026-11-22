@@ -14,7 +14,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import type { EmotionState, EmotionVector } from "@/lib/emotion/engine";
+import type { EmotionBaseline, EmotionState } from "@/lib/emotion/engine";
 import type { CompactionSettings, LoreSelectiveLogic, PresetParams, PromptBlock, UiPrefs, ModelPrefs } from "@/lib/types";
 
 const tsvector = customType<{ data: string }>({
@@ -174,7 +174,7 @@ export const chats = pgTable(
     /** Emotion engine: track {{char}}'s feelings per reply and feed them into the prompt. */
     emotionEnabled: boolean("emotion_enabled").notNull().default(true),
     /** Resting temperament the engine decays toward (estimated from the character on first use). */
-    emotionBaseline: jsonb("emotion_baseline").$type<EmotionVector>(),
+    emotionBaseline: jsonb("emotion_baseline").$type<EmotionBaseline>(),
     totalCost: doublePrecision("total_cost").notNull().default(0),
     totalTokens: integer("total_tokens").notNull().default(0),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
