@@ -9,7 +9,10 @@
 <p align="center">
   <a href="assets/Promo.mp4"><img src="assets/promo-poster.jpg" width="720" alt="Watch the SimpleTavern promo video"></a>
   <br>
-  <sub>▶ <a href="assets/Promo.mp4">Watch the 2-minute tour</a></sub>
+
+https://github.com/user-attachments/assets/d4e7c5d0-d0a1-4fcf-8e0b-a9b67709539d
+
+
 </p>
 
 ---
